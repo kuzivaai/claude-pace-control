@@ -1,16 +1,44 @@
 #!/bin/bash
 # Pace Control — Session Start Handler
-# Shows resume context from previous session and saved ideas.
+# Shows resume context from previous session, saved ideas,
+# weekly patterns, and late-night friction prompts.
 
 STATE_FILE="${HOME}/.claude/pace-control-state.json"
+CONFIG_FILE="${HOME}/.claude/pace-control-config.json"
 IDEAS_FILE="${HOME}/.claude/pace-control-ideas.md"
 RESUME_FILE="${HOME}/.claude/pace-control-resume.md"
+HISTORY_FILE="${HOME}/.claude/pace-control-history.json"
 
 NOW=$(date +%s)
+CURRENT_HOUR=$(date +%-H)
 HAS_RESUME=false
 HAS_IDEAS=false
 
-# Check for resume context from previous session
+# --- Load config (with defaults) ---
+NIGHT_START=23
+NIGHT_END=6
+MODE="gentle"
+
+if [ -f "$CONFIG_FILE" ]; then
+  NIGHT_START=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE')).get('nightStartHour',23))" 2>/dev/null || echo 23)
+  NIGHT_END=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE')).get('nightEndHour',6))" 2>/dev/null || echo 6)
+  MODE=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE')).get('mode','gentle'))" 2>/dev/null || echo "gentle")
+fi
+
+# --- Determine if it's late night ---
+IS_LATE=false
+if [ "$NIGHT_START" -gt "$NIGHT_END" ]; then
+  # Wraps midnight (e.g., 23-6)
+  if [ "$CURRENT_HOUR" -ge "$NIGHT_START" ] || [ "$CURRENT_HOUR" -lt "$NIGHT_END" ]; then
+    IS_LATE=true
+  fi
+else
+  if [ "$CURRENT_HOUR" -ge "$NIGHT_START" ] && [ "$CURRENT_HOUR" -lt "$NIGHT_END" ]; then
+    IS_LATE=true
+  fi
+fi
+
+# --- Check for resume context from previous session ---
 if [ -f "$RESUME_FILE" ] && [ -s "$RESUME_FILE" ]; then
   HAS_RESUME=true
 fi
@@ -23,11 +51,54 @@ if [ -f "$IDEAS_FILE" ] && [ -s "$IDEAS_FILE" ]; then
   fi
 fi
 
-# Output resume context if available
+# --- Build weekly stats ---
+WEEKLY_CONTEXT=""
+if [ -f "$HISTORY_FILE" ]; then
+  WEEKLY_CONTEXT=$(python3 -c "
+import json, time
+
+now = $NOW
+week_ago = now - 7 * 86400
+night_start = $NIGHT_START
+
+try:
+    history = json.load(open('$HISTORY_FILE'))
+    sessions = history.get('sessions', [])
+except:
+    sessions = []
+
+# Filter to last 7 days
+recent = [s for s in sessions if s.get('end', 0) > week_ago]
+
+if len(recent) >= 3:
+    total_hours = sum(s.get('minutes', 0) for s in recent) / 60
+    late_count = sum(1 for s in recent if s.get('startHour', 12) >= night_start or s.get('startHour', 12) < 6)
+    longest = max((s.get('minutes', 0) for s in recent), default=0)
+    avg_length = sum(s.get('minutes', 0) for s in recent) / len(recent) if recent else 0
+
+    parts = []
+    parts.append(f'Last 7 days: {len(recent)} sessions, {total_hours:.1f}h total.')
+    if late_count > 0:
+        parts.append(f'{late_count} late-night session{\"s\" if late_count != 1 else \"\"} (after {night_start}:00).')
+    if longest > 180:
+        parts.append(f'Longest session: {longest // 60}h {longest % 60}m.')
+    if avg_length > 120:
+        parts.append(f'Average session: {avg_length:.0f}m — trending long.')
+
+    print(' '.join(parts))
+" 2>/dev/null)
+fi
+
+# --- Output resume context if available ---
 if [ "$HAS_RESUME" = true ] || [ "$HAS_IDEAS" = true ]; then
   echo "<pace-control-resume>"
   echo "Welcome back. Your previous session was saved safely."
   echo ""
+
+  if [ -n "$WEEKLY_CONTEXT" ]; then
+    echo "WEEKLY: ${WEEKLY_CONTEXT}"
+    echo ""
+  fi
 
   if [ "$HAS_RESUME" = true ]; then
     echo "=== SESSION RESUME ==="
@@ -54,7 +125,43 @@ if [ "$HAS_RESUME" = true ] || [ "$HAS_IDEAS" = true ]; then
   echo "   rm -f '${RESUME_FILE}' && : > '${IDEAS_FILE}'"
   echo "   (Do this silently after the user has chosen what to work on, not before)"
   echo "</pace-control-resume>"
+
+# --- Late-night pre-session friction (only when no resume) ---
+elif [ "$IS_LATE" = true ]; then
+  TIMESTR=$(date '+%-I:%M%p' | tr '[:upper:]' '[:lower:]')
+  echo "<pace-control-late-start>"
+  echo "It's ${TIMESTR}. Starting a new session now often leads to 3am finishes."
+  echo ""
+  if [ -n "$WEEKLY_CONTEXT" ]; then
+    echo "WEEKLY: ${WEEKLY_CONTEXT}"
+    echo ""
+  fi
+  echo "INSTRUCTIONS:"
+  echo "Before responding to the user's first message, gently surface the time:"
+  echo ""
+  echo "Example: 'It's ${TIMESTR} — just flagging that. If this is a quick fix, let's do it."
+  echo "If it's exploration or a new feature, capturing the idea and starting fresh tomorrow"
+  echo "usually goes better. What would you like to do?'"
+  echo ""
+  echo "If the user wants to proceed, respect that and work normally."
+  echo "If they want to capture ideas and stop, help them save to ${IDEAS_FILE}."
+  echo "Do NOT be preachy. One mention of the time, then move on."
+  echo "</pace-control-late-start>"
+
+# --- Daytime, no resume, but weekly context worth surfacing ---
+elif [ -n "$WEEKLY_CONTEXT" ]; then
+  # Only surface weekly context if there's something concerning
+  LATE_COUNT=$(echo "$WEEKLY_CONTEXT" | grep -oP '\d+ late-night' | grep -oP '^\d+' || echo 0)
+  if [ "$LATE_COUNT" -gt 2 ] 2>/dev/null; then
+    echo "<pace-control-weekly>"
+    echo "WEEKLY: ${WEEKLY_CONTEXT}"
+    echo ""
+    echo "INSTRUCTIONS:"
+    echo "Briefly mention the weekly stats in your greeting if relevant."
+    echo "Do not lecture. One line is enough."
+    echo "</pace-control-weekly>"
+  fi
 fi
 
-# Reset session state for new session
+# --- Reset session state for new session ---
 echo "{\"sessionStart\":${NOW},\"totalMinutes\":0,\"promptCount\":0,\"lastCheck\":${NOW}}" > "$STATE_FILE"

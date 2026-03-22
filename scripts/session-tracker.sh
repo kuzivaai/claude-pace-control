@@ -1,12 +1,17 @@
 #!/bin/bash
 # Pace Control — Session Time Tracker
 # Tracks continuous Claude Code usage and outputs health signals.
+# Supports time-of-day awareness, configurable strictness, and session history.
 #
 # State file: ~/.claude/pace-control-state.json
-# Resume file: ~/.claude/pace-control-resume.md (saved context for next session)
-# Ideas file: ~/.claude/pace-control-ideas.md (captured thoughts)
+# Config file: ~/.claude/pace-control-config.json (optional)
+# History file: ~/.claude/pace-control-history.json
+# Resume file: ~/.claude/pace-control-resume.md
+# Ideas file: ~/.claude/pace-control-ideas.md
 
 STATE_FILE="${HOME}/.claude/pace-control-state.json"
+CONFIG_FILE="${HOME}/.claude/pace-control-config.json"
+HISTORY_FILE="${HOME}/.claude/pace-control-history.json"
 IDEAS_FILE="${HOME}/.claude/pace-control-ideas.md"
 RESUME_FILE="${HOME}/.claude/pace-control-resume.md"
 
@@ -16,20 +21,79 @@ if [ ! -f "$STATE_FILE" ]; then
 fi
 
 NOW=$(date +%s)
+CURRENT_HOUR=$(date +%-H)
+TIMESTR=$(date '+%-I:%M%p' | tr '[:upper:]' '[:lower:]')
 
-# Read current state
+# --- Load config (with defaults) ---
+NIGHT_START=23
+NIGHT_END=6
+MODE="gentle"
+GAP_THRESHOLD=1800
+
+if [ -f "$CONFIG_FILE" ]; then
+  NIGHT_START=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE')).get('nightStartHour',23))" 2>/dev/null || echo 23)
+  NIGHT_END=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE')).get('nightEndHour',6))" 2>/dev/null || echo 6)
+  MODE=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE')).get('mode','gentle'))" 2>/dev/null || echo "gentle")
+  GAP_THRESHOLD=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE')).get('gapThreshold',1800))" 2>/dev/null || echo 1800)
+fi
+
+# --- Determine if it's late night ---
+IS_LATE=false
+if [ "$NIGHT_START" -gt "$NIGHT_END" ]; then
+  if [ "$CURRENT_HOUR" -ge "$NIGHT_START" ] || [ "$CURRENT_HOUR" -lt "$NIGHT_END" ]; then
+    IS_LATE=true
+  fi
+else
+  if [ "$CURRENT_HOUR" -ge "$NIGHT_START" ] && [ "$CURRENT_HOUR" -lt "$NIGHT_END" ]; then
+    IS_LATE=true
+  fi
+fi
+
+# --- Read current state ---
 SESSION_START=$(python3 -c "import json; print(json.load(open('$STATE_FILE')).get('sessionStart',0))" 2>/dev/null || echo 0)
 PROMPT_COUNT=$(python3 -c "import json; print(json.load(open('$STATE_FILE')).get('promptCount',0))" 2>/dev/null || echo 0)
 LAST_CHECK=$(python3 -c "import json; print(json.load(open('$STATE_FILE')).get('lastCheck',0))" 2>/dev/null || echo 0)
 
-# If session start is 0 or gap > 30 minutes, start new session
+# --- Gap detection: if gap > threshold, log completed session and start new one ---
 GAP=$((NOW - LAST_CHECK))
-if [ "$SESSION_START" -eq 0 ] || [ "$GAP" -gt 1800 ]; then
+if [ "$SESSION_START" -eq 0 ] || [ "$GAP" -gt "$GAP_THRESHOLD" ]; then
+  # Log the completed session to history (if it was a real session)
+  if [ "$SESSION_START" -gt 0 ] && [ "$LAST_CHECK" -gt "$SESSION_START" ]; then
+    PREV_MINUTES=$(( (LAST_CHECK - SESSION_START) / 60 ))
+    PREV_START_HOUR=$(python3 -c "import time; print(time.localtime($SESSION_START).tm_hour)" 2>/dev/null || echo 12)
+    if [ "$PREV_MINUTES" -gt 5 ]; then
+      python3 -c "
+import json, os
+
+history_file = '$HISTORY_FILE'
+try:
+    history = json.load(open(history_file))
+except:
+    history = {'sessions': []}
+
+history['sessions'].append({
+    'start': $SESSION_START,
+    'end': $LAST_CHECK,
+    'minutes': $PREV_MINUTES,
+    'prompts': $PROMPT_COUNT,
+    'startHour': $PREV_START_HOUR,
+})
+
+# Keep only last 30 days
+cutoff = $NOW - 30 * 86400
+history['sessions'] = [s for s in history['sessions'] if s.get('end', 0) > cutoff]
+
+with open(history_file, 'w') as f:
+    json.dump(history, f)
+" 2>/dev/null
+    fi
+  fi
+
   SESSION_START=$NOW
   PROMPT_COUNT=0
 fi
 
-# Update state
+# --- Update state ---
 PROMPT_COUNT=$((PROMPT_COUNT + 1))
 ELAPSED_MINUTES=$(( (NOW - SESSION_START) / 60 ))
 ELAPSED_HOURS=$(( ELAPSED_MINUTES / 60 ))
@@ -48,47 +112,94 @@ with open('$STATE_FILE', 'w') as f:
     json.dump(state, f)
 " 2>/dev/null
 
-# Determine intervention level based on elapsed time
-# Level 0: < 90 min  — silent (productive zone)
-# Level 1: 90-120 min — gentle awareness
-# Level 2: 120-180 min — evidence-based nudge
-# Level 3: 180-240 min — firm with safe-save protocol
-# Level 4: 240+ min — strong recommendation with full wind-down
+# --- Calculate effective thresholds ---
+# Time-of-day multiplier: late night shifts thresholds down by one level
+# Mode multiplier: firm = 0.75x, strict = 0.5x
+THRESHOLD_L1=90   # Level 1: gentle awareness
+THRESHOLD_L2=120  # Level 2: evidence nudge
+THRESHOLD_L3=180  # Level 3: firm with safe-save
+THRESHOLD_L4=240  # Level 4: strong recommendation
 
-if [ "$ELAPSED_MINUTES" -lt 90 ]; then
+if [ "$IS_LATE" = true ]; then
+  THRESHOLD_L1=45
+  THRESHOLD_L2=75
+  THRESHOLD_L3=120
+  THRESHOLD_L4=180
+fi
+
+if [ "$MODE" = "firm" ]; then
+  THRESHOLD_L1=$(( THRESHOLD_L1 * 3 / 4 ))
+  THRESHOLD_L2=$(( THRESHOLD_L2 * 3 / 4 ))
+  THRESHOLD_L3=$(( THRESHOLD_L3 * 3 / 4 ))
+  THRESHOLD_L4=$(( THRESHOLD_L4 * 3 / 4 ))
+elif [ "$MODE" = "strict" ]; then
+  THRESHOLD_L1=$(( THRESHOLD_L1 / 2 ))
+  THRESHOLD_L2=$(( THRESHOLD_L2 / 2 ))
+  THRESHOLD_L3=$(( THRESHOLD_L3 / 2 ))
+  THRESHOLD_L4=$(( THRESHOLD_L4 / 2 ))
+fi
+
+# --- Build time context string ---
+TIME_CONTEXT=""
+if [ "$IS_LATE" = true ]; then
+  TIME_CONTEXT="It's ${TIMESTR}. "
+fi
+
+# --- Determine intervention level ---
+
+if [ "$ELAPSED_MINUTES" -lt "$THRESHOLD_L1" ]; then
   # Silent — let them work
   exit 0
 
-elif [ "$ELAPSED_MINUTES" -lt 120 ]; then
+elif [ "$ELAPSED_MINUTES" -lt "$THRESHOLD_L2" ]; then
   # Level 1: Gentle awareness
   echo "<pace-control>"
   echo "SESSION: ${ELAPSED_HOURS}h ${REMAINING_MINUTES}m | ${PROMPT_COUNT} prompts"
-  echo "You're in a good flow. Consider noting your stopping point soon."
+  if [ "$IS_LATE" = true ]; then
+    echo "${TIME_CONTEXT}You're in a good flow but keep an eye on the clock."
+  else
+    echo "You're in a good flow. Consider noting your stopping point soon."
+  fi
   echo "</pace-control>"
 
-elif [ "$ELAPSED_MINUTES" -lt 180 ]; then
+elif [ "$ELAPSED_MINUTES" -lt "$THRESHOLD_L3" ]; then
   # Level 2: Evidence-based nudge
   echo "<pace-control>"
   echo "SESSION: ${ELAPSED_HOURS}h ${REMAINING_MINUTES}m | ${PROMPT_COUNT} prompts"
   echo ""
-  echo "Research shows cognitive performance declines ~20% after 2 hours of sustained focus."
-  echo "Your error rate and response quality are likely declining — you just can't feel it."
+  if [ "$IS_LATE" = true ]; then
+    echo "${TIME_CONTEXT}Decisions made at this hour are more likely to need reverting tomorrow."
+    echo "Research shows cognitive performance declines ~20% after 2 hours of sustained focus"
+    echo "— and sleep deprivation compounds this significantly."
+  else
+    echo "Research shows cognitive performance declines ~20% after 2 hours of sustained focus."
+    echo "Your error rate and response quality are likely declining — you just can't feel it."
+  fi
   echo ""
   echo "If the user seems to be wrapping up or mentions stopping, support that decision."
   echo "If they mention a new idea, suggest capturing it in ${IDEAS_FILE} for tomorrow."
   echo "</pace-control>"
 
-elif [ "$ELAPSED_MINUTES" -lt 240 ]; then
+elif [ "$ELAPSED_MINUTES" -lt "$THRESHOLD_L4" ]; then
   # Level 3: Firm with SAFE-SAVE protocol
   echo "<pace-control>"
   echo "SESSION: ${ELAPSED_HOURS}h ${REMAINING_MINUTES}m | ${PROMPT_COUNT} prompts"
   echo ""
-  echo "IMPORTANT — This session has been running for over 3 hours."
-  echo ""
-  echo "At this duration:"
-  echo "- Error rates typically increase 2-3x vs your first hour"
-  echo "- Token waste from retries accumulates"
-  echo "- Decisions made now are more likely to need reverting tomorrow"
+  if [ "$IS_LATE" = true ]; then
+    echo "IMPORTANT — It's ${TIMESTR} and this session has been running for over ${ELAPSED_HOURS}h ${REMAINING_MINUTES}m."
+    echo ""
+    echo "At this hour and duration:"
+    echo "- Sleep deprivation impairs cognition as much as alcohol intoxication"
+    echo "- Error rates at this hour are typically 2-3x your daytime baseline"
+    echo "- The 'one more prompt' urge is strongest when you're most tired"
+  else
+    echo "IMPORTANT — This session has been running for over ${ELAPSED_HOURS}h ${REMAINING_MINUTES}m."
+    echo ""
+    echo "At this duration:"
+    echo "- Error rates typically increase 2-3x vs your first hour"
+    echo "- Token waste from retries accumulates"
+    echo "- Decisions made now are more likely to need reverting tomorrow"
+  fi
   echo ""
   echo "SAFE-SAVE PROTOCOL — When responding, naturally work towards wrapping up:"
   echo ""
@@ -106,11 +217,19 @@ elif [ "$ELAPSED_MINUTES" -lt 240 ]; then
   echo "3. SAVE IDEAS: Ask 'Any ideas racing through your mind? I'll save them so you won't lose them.'"
   echo "   Append to ${IDEAS_FILE} with timestamp."
   echo ""
-  echo "Example response: 'We've been at this for ${ELAPSED_HOURS}h ${REMAINING_MINUTES}m — solid progress."
-  echo "Let me save everything so you can pick up right where we left off. I'll commit the current work,"
-  echo "write up where we are, and capture any ideas. Nothing will be lost.'"
+  if [ "$IS_LATE" = true ]; then
+    echo "Example response: 'It's ${TIMESTR} and we've been at this ${ELAPSED_HOURS}h ${REMAINING_MINUTES}m."
+    echo "Let me save everything so you can pick up fresh tomorrow. Your future self will thank you.'"
+  else
+    echo "Example response: 'We've been at this for ${ELAPSED_HOURS}h ${REMAINING_MINUTES}m — solid progress."
+    echo "Let me save everything so you can pick up right where we left off.'"
+  fi
   echo ""
   echo "If the user wants to continue, respect their autonomy but suggest committing current work first."
+  if [ "$MODE" = "strict" ]; then
+    echo ""
+    echo "STRICT MODE: Do not start new tasks. Only complete the current task, then execute Safe-Save."
+  fi
   echo "</pace-control>"
 
 else
@@ -118,12 +237,22 @@ else
   echo "<pace-control>"
   echo "SESSION: ${ELAPSED_HOURS}h ${REMAINING_MINUTES}m | ${PROMPT_COUNT} prompts"
   echo ""
-  echo "STRONG RECOMMENDATION — This session has been running for over 4 hours."
-  echo ""
-  echo "At this point:"
-  echo "- You are in the diminishing returns zone"
-  echo "- Code written now has significantly higher defect rates"
-  echo "- The 'one more prompt' urge is variable reinforcement — same pattern as slot machines"
+  if [ "$IS_LATE" = true ]; then
+    echo "STRONG RECOMMENDATION — It's ${TIMESTR}. This session has been running for over ${ELAPSED_HOURS} hours."
+    echo ""
+    echo "At this point:"
+    echo "- You are sleep-deprived and in the diminishing returns zone"
+    echo "- Code written between midnight and 5am has the highest defect rate of any time block"
+    echo "- Tomorrow you will likely revert or rewrite what you're doing right now"
+    echo "- The 'one more prompt' urge is variable reinforcement — same pattern as slot machines"
+  else
+    echo "STRONG RECOMMENDATION — This session has been running for over ${ELAPSED_HOURS} hours."
+    echo ""
+    echo "At this point:"
+    echo "- You are in the diminishing returns zone"
+    echo "- Code written now has significantly higher defect rates"
+    echo "- The 'one more prompt' urge is variable reinforcement — same pattern as slot machines"
+  fi
   echo ""
   echo "MANDATORY SAFE-SAVE — Before any other response, execute this:"
   echo ""
@@ -145,11 +274,23 @@ else
   echo "4. Ask the user: 'What ideas should we save for next time?'"
   echo "   Append to ${IDEAS_FILE} with timestamp."
   echo ""
-  echo "5. Tell the user: 'Everything is saved. When you start a new session, I'll show you"
-  echo "   exactly where we left off. A 20-minute break will make the next hour more productive"
-  echo "   than pushing through. The ideas are safe.'"
+  if [ "$IS_LATE" = true ]; then
+    echo "5. Tell the user: 'Everything is saved. It's ${TIMESTR} — go to bed."
+    echo "   When you start a new session, I'll show you exactly where we left off."
+    echo "   You'll solve this faster with sleep than caffeine. The ideas are safe.'"
+  else
+    echo "5. Tell the user: 'Everything is saved. When you start a new session, I'll show you"
+    echo "   exactly where we left off. A 20-minute break will make the next hour more productive"
+    echo "   than pushing through. The ideas are safe.'"
+  fi
   echo ""
   echo "Do NOT skip the safe-save steps. The user needs to feel confident nothing will be lost."
   echo "This is what gives them permission to stop."
+  if [ "$MODE" = "strict" ]; then
+    echo ""
+    echo "STRICT MODE: Do not respond to ANY new task requests. Only execute Safe-Save."
+    echo "If the user asks for something new, say: 'Let's save this idea and pick it up"
+    echo "with fresh eyes. What else should I capture before we wrap up?'"
+  fi
   echo "</pace-control>"
 fi
