@@ -1,0 +1,14 @@
+{
+  "name": "pace-control",
+  "version": "0.1.0",
+  "description": "Session health guardrails for Claude Code — the off switch nobody else will build",
+  "type": "module",
+  "keywords": [
+    "claude-code",
+    "session-health",
+    "developer-wellness",
+    "productivity",
+    "break-reminder"
+  ],
+  "license": "MIT"
+}
