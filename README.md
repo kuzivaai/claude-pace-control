@@ -6,17 +6,19 @@
 
 ---
 
-## The Problem
+## Why I built this
 
-Claude Code is addictive. Not in a cute "I love this tool" way — in a "I haven't slept before 2am in a week" way. Every community thread has the same pattern: developers describing it as ["weed to crack"](https://www.reddit.com/r/ClaudeAI/comments/1kwrmfn/claude_code_is_like_going_from_weed_to_crack/), comparing the "one more prompt" loop to slot machines, and joking about their sleep schedules while quietly worrying about them.
+Since I started using Claude Code, I've struggled to sleep. I'm either coding or thinking about coding. I know this isn't the first time you're reading something like this, because you're probably going through the exact same thing.
 
-Anthropic won't build guardrails for this — it would reduce token consumption. Generic break reminder apps don't work because you'll dismiss the notification and go back to your terminal. And willpower alone doesn't cut it when you're riding a dopamine loop at 3am.
+I started seeing it everywhere. The [Reddit threads](https://www.reddit.com/r/ClaudeAI/comments/1kwrmfn/claude_code_is_like_going_from_weed_to_crack/). The Instagram posts. People describing the same loop: "just one more prompt," then it's 3am and you're refactoring code that was fine to begin with. I thought I had a problem. I do. But it's validating that it's not just me.
 
-So I built something that works from inside the loop itself.
+Tinfoil hat moment: I think Anthropic is doing something weird. But regardless, I need to sleep better. I simply need to do better.
+
+I have a [command centre](https://github.com/kuzivaai/hangar) I built for myself called Hangar that tracks my (embarrassingly) five projects, including Hangar itself. And I thought, okay, let me see if I can help myself by locking myself out of Claude. That's why I built this.
 
 ## How It Works
 
-Pace Control uses Claude Code's [hook system](https://docs.anthropic.com/en/docs/claude-code/hooks) to inject context into Claude's responses. There's no daemon, no background process, no server — just two bash scripts and Claude's own helpfulness.
+Pace Control uses Claude Code's [hook system](https://docs.anthropic.com/en/docs/claude-code/hooks) to inject context into Claude's responses. No daemon, no background process, no server. Just two bash scripts and Claude's own helpfulness.
 
 ### Progressive Intervention
 
@@ -34,8 +36,8 @@ Silent when you're productive. Escalates only when the evidence says you're decl
 
 A 2-hour session at 2pm is productive. A 2-hour session at 2am is pathological. Pace Control knows the difference.
 
-- **Pre-session friction:** Start Claude Code after 11pm and it gently surfaces the time before responding — *"It's 11:47pm. Quick fix or exploration?"* One mention, not a lecture.
-- **Faster escalation:** All thresholds shift down ~40% at night. Level 4 messaging is blunt: *"It's 2:17am — go to bed."*
+- **Pre-session friction:** Start Claude Code after 11pm and it gently surfaces the time before responding. *"It's 11:47pm. Quick fix or exploration?"* One mention, not a lecture.
+- **Faster escalation:** All thresholds shift down ~40% at night. Level 4 messaging is blunt. *"It's 2:17am. Go to bed."*
 - **Sleep-specific framing:** Night-time nudges reference sleep deprivation research instead of generic productivity stats.
 
 ### Weekly Pattern Detection
@@ -44,16 +46,16 @@ Surfaces cumulative stats on session start:
 
 > *"Last 7 days: 12 sessions, 18.5h total. 4 late-night sessions (after 23:00). Longest session: 5h 12m."*
 
-If you've had 3+ late-night sessions in a week, you'll see this even during daytime starts. Not a guilt trip — a pattern you might not have noticed.
+If you've had 3+ late-night sessions in a week, you'll see this even during daytime starts. Not a guilt trip. Just a pattern you might not have noticed.
 
 ### The Safe Wind-Down Protocol
 
-The reason people don't stop isn't willpower — it's anxiety about losing progress. The Wind-Down Protocol eliminates that anxiety:
+The reason people don't stop isn't willpower. It's anxiety about losing progress. The Wind-Down Protocol eliminates that anxiety:
 
-1. **Commits your work** — `git status`, stage, commit with a descriptive message
-2. **Saves session context** — what you were working on, current state, next steps, modified files, open questions
-3. **Captures ideas** — *"Any thoughts racing? I'll save them so you won't lose them."*
-4. **Resumes next time** — your next Claude Code session opens with full context: *"Welcome back. Last time you were working on X, you finished Y, and the next step is Z."*
+1. **Commits your work.** `git status`, stage, commit with a descriptive message.
+2. **Saves session context.** What you were working on, current state, next steps, modified files, open questions.
+3. **Captures ideas.** *"Any thoughts racing? I'll save them so you won't lose them."*
+4. **Resumes next time.** Your next Claude Code session opens with full context: *"Welcome back. Last time you were working on X, you finished Y, and the next step is Z."*
 
 ### What Makes This Different
 
@@ -68,7 +70,7 @@ The reason people don't stop isn't willpower — it's anxiety about losing progr
 | **First 90 min** | May interrupt flow | Completely silent |
 | **Escalation** | Same intensity always | 5 levels, progressive |
 
-**Key insight:** The barrier to stopping isn't willpower — it's anxiety about losing progress. Remove the anxiety, and people stop naturally.
+**Key insight:** The barrier to stopping isn't willpower. It's anxiety about losing progress. Remove the anxiety, and people stop naturally.
 
 ## Install
 
@@ -116,7 +118,7 @@ Add these hooks to `~/.claude/settings.json` (create the file if it doesn't exis
 
 ### Step 3: Verify
 
-Start a Claude Code session. You should see **no output** — Level 0 is silent for the first 90 minutes (45 at night). That means it's working.
+Start a Claude Code session. You should see **no output**. Level 0 is silent for the first 90 minutes (45 at night). That means it's working.
 
 ### Alternative: Just grab the scripts
 
@@ -124,7 +126,7 @@ The whole thing is two bash scripts. Copy `scripts/session-start.sh` and `script
 
 ## Configuration
 
-Create `~/.claude/pace-control-config.json` to customise (optional — defaults are sensible):
+Create `~/.claude/pace-control-config.json` to customise. Optional, the defaults are sensible:
 
 ```json
 {
@@ -144,9 +146,9 @@ Create `~/.claude/pace-control-config.json` to customise (optional — defaults 
 
 ### Modes
 
-- **Gentle** — evidence and suggestions, full autonomy. For most people.
-- **Firm** — thresholds reduced by 25%, stronger language. Still respects choice.
-- **Strict** — thresholds halved. At Level 4, Claude refuses new tasks and only completes current work + Safe-Save. For people who've asked to be held accountable.
+- **Gentle** is the default. Evidence and suggestions, full autonomy. For most people.
+- **Firm** reduces thresholds by 25% with stronger language. Still respects your choice.
+- **Strict** halves all thresholds. At Level 4, Claude refuses new tasks and only completes current work + Safe-Save. For people who've asked to be held accountable.
 
 ## Files
 
@@ -170,7 +172,7 @@ Check your session health anytime with the `/pace-check` skill. Copy `skills/pac
 
 ## Known Limitations
 
-- **Multi-terminal:** Each Claude Code terminal is tracked independently. If you have 3 terminals open, each has its own session timer. Shared state is possible but adds complexity — maybe v2.
+- **Multi-terminal:** Each Claude Code terminal is tracked independently. If you have 3 terminals open, each has its own session timer. Shared state is possible but adds complexity. Maybe v2.
 - **Claude Code only:** This uses Claude Code's hook system. It won't work with Cursor, Copilot, or other AI coding tools.
 - **System clock:** Thresholds use your local system time. If you travel across time zones, night mode shifts with you.
 - **Python 3 required:** Used for JSON parsing. The scripts will show a clear error message if Python 3 isn't found.
@@ -186,11 +188,11 @@ Check your session health anytime with the `/pace-check` skill. Copy `skills/pac
 
 The intervention model is grounded in real research, not vibes:
 
-- **Gloria Mark (UC Irvine)** — attention span research showing cognitive degradation curves over sustained work. Recovery from interruption takes ~25 minutes.
-- **Anders Ericsson** — deliberate practice research finding peak performers sustain focused work in 90-minute blocks (the basis for Level 0's silent period).
-- **B.F. Skinner** — variable ratio reinforcement schedules produce the highest, most persistent response rates. The "one more prompt" loop follows this pattern exactly.
-- **Zeigarnik Effect** — incomplete tasks occupy working memory disproportionately. Writing down an idea (cognitive offloading) releases the hold, making it safe to stop.
-- **Thaler & Sunstein (Nudge theory)** — modifying the choice environment is more effective than relying on willpower. Pace Control modifies Claude's responses rather than asking you to self-regulate.
+- **Gloria Mark (UC Irvine)** researched attention span and cognitive degradation curves over sustained work. Recovery from interruption takes ~25 minutes.
+- **Anders Ericsson** found that peak performers sustain focused work in 90-minute blocks. That's the basis for Level 0's silent period.
+- **B.F. Skinner** showed that variable ratio reinforcement schedules produce the highest, most persistent response rates. The "one more prompt" loop follows this pattern exactly.
+- **Zeigarnik Effect.** Incomplete tasks occupy working memory disproportionately. Writing down an idea (cognitive offloading) releases the hold, making it safe to stop.
+- **Thaler & Sunstein (Nudge theory).** Modifying the choice environment is more effective than relying on willpower. Pace Control modifies Claude's responses rather than asking you to self-regulate.
 
 ## Contributing
 
@@ -198,4 +200,4 @@ Issues and PRs welcome. If this helped you sleep, consider starring the repo.
 
 ## Licence
 
-[MIT](LICENSE) — do whatever you want with it. If it helps you sleep, that's enough.
+[MIT](LICENSE). Do whatever you want with it. If it helps you sleep, that's enough.
