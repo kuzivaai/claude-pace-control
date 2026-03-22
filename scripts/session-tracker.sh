@@ -28,7 +28,7 @@ RESUME_FILE="${CLAUDE_DIR}/pace-control-resume.md"
 
 # Ensure state file exists with valid JSON
 if [ ! -f "$STATE_FILE" ] || [ ! -s "$STATE_FILE" ]; then
-  echo '{"sessionStart":0,"totalMinutes":0,"promptCount":0,"lastCheck":0}' > "$STATE_FILE"
+  echo '{"sessionStart":0,"totalMinutes":0,"promptCount":0,"lastCheck":0,"windDownShown":false,"windDownPromptCount":0,"nextNudgeAt":0,"windDownLevel":0}' > "$STATE_FILE"
 fi
 
 NOW=$(date +%s)
@@ -64,6 +64,10 @@ fi
 SESSION_START=$(python3 -c "import json; print(json.load(open('$STATE_FILE')).get('sessionStart',0))" 2>/dev/null || echo 0)
 PROMPT_COUNT=$(python3 -c "import json; print(json.load(open('$STATE_FILE')).get('promptCount',0))" 2>/dev/null || echo 0)
 LAST_CHECK=$(python3 -c "import json; print(json.load(open('$STATE_FILE')).get('lastCheck',0))" 2>/dev/null || echo 0)
+WIND_DOWN_SHOWN=$(python3 -c "import json; print(json.load(open('$STATE_FILE')).get('windDownShown',False))" 2>/dev/null || echo "False")
+WIND_DOWN_PROMPT_COUNT=$(python3 -c "import json; print(json.load(open('$STATE_FILE')).get('windDownPromptCount',0))" 2>/dev/null || echo 0)
+NEXT_NUDGE_AT=$(python3 -c "import json; print(json.load(open('$STATE_FILE')).get('nextNudgeAt',0))" 2>/dev/null || echo 0)
+WIND_DOWN_LEVEL=$(python3 -c "import json; print(json.load(open('$STATE_FILE')).get('windDownLevel',0))" 2>/dev/null || echo 0)
 
 # --- Gap detection: if gap > threshold, log completed session and start new one ---
 GAP=$((NOW - LAST_CHECK))
@@ -105,6 +109,10 @@ with open(history_file, 'w') as f:
 
   SESSION_START=$NOW
   PROMPT_COUNT=0
+  WIND_DOWN_SHOWN="False"
+  WIND_DOWN_PROMPT_COUNT=0
+  NEXT_NUDGE_AT=0
+  WIND_DOWN_LEVEL=0
 fi
 
 # --- Update state ---
@@ -113,7 +121,13 @@ ELAPSED_MINUTES=$(( (NOW - SESSION_START) / 60 ))
 ELAPSED_HOURS=$(( ELAPSED_MINUTES / 60 ))
 REMAINING_MINUTES=$(( ELAPSED_MINUTES % 60 ))
 
-# Write updated state
+# Convert bash string to Python bool
+if [ "$WIND_DOWN_SHOWN" = "True" ]; then
+  WIND_DOWN_SHOWN_PY="True"
+else
+  WIND_DOWN_SHOWN_PY="False"
+fi
+
 python3 -c "
 import json
 state = {
@@ -121,6 +135,10 @@ state = {
     'totalMinutes': $ELAPSED_MINUTES,
     'promptCount': $PROMPT_COUNT,
     'lastCheck': $NOW,
+    'windDownShown': $WIND_DOWN_SHOWN_PY,
+    'windDownPromptCount': $WIND_DOWN_PROMPT_COUNT,
+    'nextNudgeAt': $NEXT_NUDGE_AT,
+    'windDownLevel': $WIND_DOWN_LEVEL,
 }
 with open('$STATE_FILE', 'w') as f:
     json.dump(state, f)

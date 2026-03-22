@@ -178,4 +178,4 @@ elif [ -n "$WEEKLY_CONTEXT" ]; then
 fi
 
 # --- Reset session state for new session ---
-echo "{\"sessionStart\":${NOW},\"totalMinutes\":0,\"promptCount\":0,\"lastCheck\":${NOW}}" > "$STATE_FILE"
+echo "{\"sessionStart\":${NOW},\"totalMinutes\":0,\"promptCount\":0,\"lastCheck\":${NOW},\"windDownShown\":false,\"windDownPromptCount\":0,\"nextNudgeAt\":0,\"windDownLevel\":0}" > "$STATE_FILE"
