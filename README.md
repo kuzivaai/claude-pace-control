@@ -1,74 +1,89 @@
 # claude-pace-control
 
-Look, we need to talk about this.
+[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-I've been using Claude Code since launch and somewhere around week three I realised I hadn't gone to bed before 2am in five consecutive days. I'd finish a feature, feel the rush, and think "just one more prompt." Three hours later I'm refactoring code that was fine to begin with and my commit messages are getting progressively unhinged.
+**The off-switch for Claude Code that Anthropic won't build.**
 
-I know I'm not alone. Every Claude Code thread has the same energy — "this thing is crack," "I can't stop," "my girlfriend thinks I'm having an affair with my terminal." We're all half-joking. Half.
+---
 
-So I built this. It's a Claude Code hook that tracks how long you've been going and progressively nudges you to stop. Not by nagging. Not by locking you out. It just starts showing you evidence that you're getting worse — because you are, you just can't feel it at 1am.
+## The Problem
 
-The key trick: it captures your racing ideas before you stop, so the "but I'll forget this brilliant thing" excuse doesn't work anymore. Everything gets saved. Next session, Claude shows you exactly where you left off. Nothing lost.
+Claude Code is addictive. Not in a cute "I love this tool" way — in a "I haven't slept before 2am in a week" way. Every community thread has the same pattern: developers describing it as ["weed to crack"](https://www.reddit.com/r/ClaudeAI/comments/1kwrmfn/claude_code_is_like_going_from_weed_to_crack/), comparing the "one more prompt" loop to slot machines, and joking about their sleep schedules while quietly worrying about them.
 
-**Use it or don't. But if you've ever looked up from your terminal and realised the sun came up, maybe give it a go.**
+Anthropic won't build guardrails for this — it would reduce token consumption. Generic break reminder apps don't work because you'll dismiss the notification and go back to your terminal. And willpower alone doesn't cut it when you're riding a dopamine loop at 3am.
+
+So I built something that works from inside the loop itself.
 
 ## How It Works
 
-Pace Control runs as a hook inside Claude Code. It's silent for the first 90 minutes — that's your productive zone, no interruptions. After that, it escalates gradually:
+Pace Control uses Claude Code's [hook system](https://docs.anthropic.com/en/docs/claude-code/hooks) to inject context into Claude's responses. There's no daemon, no background process, no server — just two bash scripts and Claude's own helpfulness.
 
-| Duration (daytime) | Duration (after 11pm) | What Happens |
-|--------------------|----------------------|-------------|
-| 0–90 min | 0–45 min | **Nothing.** You're in the zone. |
-| 90–120 min | 45–75 min | **Gentle note.** Session length mentioned, no pressure. |
-| 2–3 hours | 75 min–2 hours | **Evidence nudge.** Error rate data + sleep deprivation framing at night. |
-| 3–4 hours | 2–3 hours | **Safe-save prompt.** Suggests committing work and saving context. |
-| 4+ hours | 3+ hours | **Full wind-down.** Commits code, saves session context, captures ideas. |
+### Progressive Intervention
+
+Silent when you're productive. Escalates only when the evidence says you're declining.
+
+| Level | Daytime Threshold | Night Threshold (after 11pm) | What Claude Does |
+|-------|-------------------|------------------------------|-----------------|
+| 0 | 0–90 min | 0–45 min | Nothing. You're in the zone. |
+| 1 | 90–120 min | 45–75 min | Mentions session length. No pressure. |
+| 2 | 2–3 hours | 75 min–2 hours | Surfaces error rate evidence. Supports stopping. |
+| 3 | 3–4 hours | 2–3 hours | Initiates Safe-Save Protocol. Suggests committing. |
+| 4 | 4+ hours | 3+ hours | Mandatory wind-down. Commits, saves context, captures ideas. |
 
 ### Late-Night Awareness
 
-The problem isn't 2-hour sessions at 2pm. It's 2-hour sessions at 2am.
+A 2-hour session at 2pm is productive. A 2-hour session at 2am is pathological. Pace Control knows the difference.
 
-If you start a session after 11pm, Pace Control does two things:
-1. **Pre-session friction** — before Claude responds, it gently surfaces the time and asks whether this is a quick fix or exploration. One mention, not a lecture.
-2. **Faster escalation** — all thresholds shift down. Level 2 kicks in at 75 minutes instead of 120. At level 4, the messaging is blunt: *"It's 2:17am — go to bed."*
+- **Pre-session friction:** Start Claude Code after 11pm and it gently surfaces the time before responding — *"It's 11:47pm. Quick fix or exploration?"* One mention, not a lecture.
+- **Faster escalation:** All thresholds shift down ~40% at night. Level 4 messaging is blunt: *"It's 2:17am — go to bed."*
+- **Sleep-specific framing:** Night-time nudges reference sleep deprivation research instead of generic productivity stats.
 
-### Weekly Patterns
+### Weekly Pattern Detection
 
-Pace Control tracks your session history and surfaces weekly stats on session start:
+Surfaces cumulative stats on session start:
 
 > *"Last 7 days: 12 sessions, 18.5h total. 4 late-night sessions (after 23:00). Longest session: 5h 12m."*
 
-If you've had 3+ late-night sessions in a week, you'll see this context even during daytime starts. It's not a guilt trip — it's a pattern you might not have noticed.
+If you've had 3+ late-night sessions in a week, you'll see this even during daytime starts. Not a guilt trip — a pattern you might not have noticed.
 
-### The Wind-Down Protocol
+### The Safe Wind-Down Protocol
 
-When you do stop (or when Claude starts firmly suggesting it), here's what happens:
+The reason people don't stop isn't willpower — it's anxiety about losing progress. The Wind-Down Protocol eliminates that anxiety:
 
-1. **Commits your work** — staged, messaged, pushed if you want
-2. **Saves session context** — what you were working on, current state, next steps, modified files
-3. **Captures your ideas** — "any thoughts racing? I'll save them for tomorrow"
-4. **Resumes next time** — your next Claude Code session opens with everything you saved
+1. **Commits your work** — `git status`, stage, commit with a descriptive message
+2. **Saves session context** — what you were working on, current state, next steps, modified files, open questions
+3. **Captures ideas** — *"Any thoughts racing? I'll save them so you won't lose them."*
+4. **Resumes next time** — your next Claude Code session opens with full context: *"Welcome back. Last time you were working on X, you finished Y, and the next step is Z."*
 
-The resume is the bit that actually matters. The reason people don't stop is fear of losing momentum. This removes that fear.
+### What Makes This Different
 
-### Manual Check
+| Property | Break Reminder Apps | Pace Control |
+|----------|-------------------|--------------|
+| **Location** | External notification | Inside your terminal |
+| **Dismissal** | One click to ignore | Part of Claude's response |
+| **Evidence** | "Time's up" | "Your error rate is increasing" |
+| **On stop** | Nothing happens | Commits code, saves context, captures ideas |
+| **Resume** | None | Full context injection next session |
+| **Autonomy** | Nags or blocks | Shows evidence, respects choice |
+| **First 90 min** | May interrupt flow | Completely silent |
+| **Escalation** | Same intensity always | 5 levels, progressive |
 
-You can also check your session health anytime:
-
-```
-/pace-check
-```
+**Key insight:** The barrier to stopping isn't willpower — it's anxiety about losing progress. Remove the anxiety, and people stop naturally.
 
 ## Install
 
-### Option 1: Clone and hook up
+**Prerequisites:** Claude Code with hooks support, Python 3, bash.
+
+### Step 1: Clone the repo
 
 ```bash
 git clone https://github.com/kuzivaai/claude-pace-control.git ~/.claude/plugins/pace-control
 chmod +x ~/.claude/plugins/pace-control/scripts/*.sh
 ```
 
-Then add these hooks to your `~/.claude/settings.json` (create the file if it doesn't exist, or merge with your existing hooks):
+### Step 2: Add hooks to your settings
+
+Add these hooks to `~/.claude/settings.json` (create the file if it doesn't exist, or merge with existing hooks):
 
 ```json
 {
@@ -99,13 +114,17 @@ Then add these hooks to your `~/.claude/settings.json` (create the file if it do
 }
 ```
 
-### Option 2: Just grab the scripts
+### Step 3: Verify
 
-Honestly, the whole thing is two bash scripts. Copy `scripts/session-start.sh` and `scripts/session-tracker.sh` somewhere, make them executable, and point your hooks at them. That's it.
+Start a Claude Code session. You should see **no output** — Level 0 is silent for the first 90 minutes (45 at night). That means it's working.
+
+### Alternative: Just grab the scripts
+
+The whole thing is two bash scripts. Copy `scripts/session-start.sh` and `scripts/session-tracker.sh` anywhere, make them executable, and point your hooks at them.
 
 ## Configuration
 
-Create `~/.claude/pace-control-config.json` to customise behaviour:
+Create `~/.claude/pace-control-config.json` to customise (optional — defaults are sensible):
 
 ```json
 {
@@ -125,52 +144,58 @@ Create `~/.claude/pace-control-config.json` to customise behaviour:
 
 ### Modes
 
-- **Gentle** — current default. Evidence and suggestions. Full autonomy.
-- **Firm** — thresholds reduced by 25%. Stronger language. Still respects choice.
+- **Gentle** — evidence and suggestions, full autonomy. For most people.
+- **Firm** — thresholds reduced by 25%, stronger language. Still respects choice.
 - **Strict** — thresholds halved. At Level 4, Claude refuses new tasks and only completes current work + Safe-Save. For people who've asked to be held accountable.
-
-The config file is optional. Without it, everything runs on gentle mode with default timings.
-
-## Requirements
-
-- Bash
-- Python 3 (used for JSON parsing — a few lines per script)
-- Claude Code with hooks support
 
 ## Files
 
-All state lives in `~/.claude/`. All plain text. All deletable. All yours.
+All state lives in `~/.claude/`. Plain text. Deletable. Yours.
 
-| File | Purpose |
-|------|---------|
-| `pace-control-state.json` | Current session: start time, prompt count, last check |
-| `pace-control-config.json` | Optional config: mode, night hours, gap threshold |
-| `pace-control-history.json` | Session log (last 30 days) for weekly pattern detection |
-| `pace-control-resume.md` | Saved context from last wind-down |
-| `pace-control-ideas.md` | Captured ideas from wind-down sessions |
+| File | Created | Purpose |
+|------|---------|---------|
+| `pace-control-state.json` | Automatically | Current session: start time, prompt count |
+| `pace-control-config.json` | By you (optional) | Mode, night hours, gap threshold |
+| `pace-control-history.json` | Automatically | Session log (last 30 days) for weekly patterns |
+| `pace-control-resume.md` | By wind-down | Saved context for next session |
+| `pace-control-ideas.md` | By wind-down | Captured ideas |
 
-## How it actually works (for the curious)
+## Manual Check
 
-There's no daemon, no background process, no server. The `PostToolUse` hook fires after every tool call Claude makes. The script checks how long you've been going, what time it is, and what mode you're in. If you're past a threshold, it injects a `<pace-control>` message into Claude's context. Claude reads it and adjusts its behaviour — mentioning session length, suggesting commits, offering to capture ideas.
+Check your session health anytime with the `/pace-check` skill. Copy `skills/pace-check/SKILL.md` to your Claude Code skills directory.
 
-The `SessionStart` hook checks three things: (1) do you have a resume file from last time? (2) is it late at night? (3) what do your weekly patterns look like? It injects the relevant context before Claude responds.
-
-When a session ends (gap > 30 minutes), the tracker logs it to a history file. This builds the weekly pattern data that surfaces on your next session start.
-
-That's literally it. Two scripts, some JSON state, and Claude's own helpfulness doing the rest.
-
-## Why not just set a timer?
-
-Because timers don't know what you're working on. They can't commit your code. They can't save your context. They can't capture the idea that's keeping you awake. And you'll dismiss a timer. You won't dismiss Claude saying "it's 2am and we've been at this for 3 hours, let me save everything so you can pick up tomorrow."
-
-The intervention is *inside* the thing you're addicted to. That's the whole point.
+```
+/pace-check
+```
 
 ## Known Limitations
 
-- **Multi-terminal:** If you have 3 Claude Code terminals open, each is tracked independently. Power users will understand this. A shared state file is possible but adds complexity — maybe v2.
-- **Time zones:** Uses your system clock. If you travel, thresholds shift with you.
-- **Not a replacement for discipline:** This is a nudge, not a lock. If you're determined to code at 4am, nothing will stop you. But it'll make sure your work is saved when you inevitably crash.
+- **Multi-terminal:** Each Claude Code terminal is tracked independently. If you have 3 terminals open, each has its own session timer. Shared state is possible but adds complexity — maybe v2.
+- **Claude Code only:** This uses Claude Code's hook system. It won't work with Cursor, Copilot, or other AI coding tools.
+- **System clock:** Thresholds use your local system time. If you travel across time zones, night mode shifts with you.
+- **Python 3 required:** Used for JSON parsing. The scripts will show a clear error message if Python 3 isn't found.
+- **No cross-machine sync:** State files are local to your machine.
+
+## Uninstalling
+
+1. Remove the `SessionStart` and `PostToolUse` entries from `~/.claude/settings.json`
+2. Optionally delete the state files: `rm ~/.claude/pace-control-*`
+3. Optionally remove the repo: `rm -rf ~/.claude/plugins/pace-control`
+
+## Research Backing
+
+The intervention model is grounded in real research, not vibes:
+
+- **Gloria Mark (UC Irvine)** — attention span research showing cognitive degradation curves over sustained work. Recovery from interruption takes ~25 minutes.
+- **Anders Ericsson** — deliberate practice research finding peak performers sustain focused work in 90-minute blocks (the basis for Level 0's silent period).
+- **B.F. Skinner** — variable ratio reinforcement schedules produce the highest, most persistent response rates. The "one more prompt" loop follows this pattern exactly.
+- **Zeigarnik Effect** — incomplete tasks occupy working memory disproportionately. Writing down an idea (cognitive offloading) releases the hold, making it safe to stop.
+- **Thaler & Sunstein (Nudge theory)** — modifying the choice environment is more effective than relying on willpower. Pace Control modifies Claude's responses rather than asking you to self-regulate.
+
+## Contributing
+
+Issues and PRs welcome. If this helped you sleep, consider starring the repo.
 
 ## Licence
 
-MIT — do whatever you want with it. If it helps you sleep, that's enough.
+[MIT](LICENSE) — do whatever you want with it. If it helps you sleep, that's enough.

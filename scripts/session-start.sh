@@ -3,11 +3,24 @@
 # Shows resume context from previous session, saved ideas,
 # weekly patterns, and late-night friction prompts.
 
-STATE_FILE="${HOME}/.claude/pace-control-state.json"
-CONFIG_FILE="${HOME}/.claude/pace-control-config.json"
-IDEAS_FILE="${HOME}/.claude/pace-control-ideas.md"
-RESUME_FILE="${HOME}/.claude/pace-control-resume.md"
-HISTORY_FILE="${HOME}/.claude/pace-control-history.json"
+# --- Preflight: check dependencies ---
+if ! command -v python3 &>/dev/null; then
+  echo "<pace-control-error>"
+  echo "Pace Control requires Python 3 for JSON parsing but python3 was not found."
+  echo "Install Python 3 or add it to your PATH to enable session tracking."
+  echo "</pace-control-error>"
+  exit 0
+fi
+
+# --- Ensure ~/.claude/ directory exists ---
+CLAUDE_DIR="${HOME}/.claude"
+mkdir -p "$CLAUDE_DIR"
+
+STATE_FILE="${CLAUDE_DIR}/pace-control-state.json"
+CONFIG_FILE="${CLAUDE_DIR}/pace-control-config.json"
+IDEAS_FILE="${CLAUDE_DIR}/pace-control-ideas.md"
+RESUME_FILE="${CLAUDE_DIR}/pace-control-resume.md"
+HISTORY_FILE="${CLAUDE_DIR}/pace-control-history.json"
 
 NOW=$(date +%s)
 CURRENT_HOUR=$(date +%-H)
@@ -55,7 +68,7 @@ fi
 WEEKLY_CONTEXT=""
 if [ -f "$HISTORY_FILE" ]; then
   WEEKLY_CONTEXT=$(python3 -c "
-import json, time
+import json
 
 now = $NOW
 week_ago = now - 7 * 86400
@@ -79,7 +92,8 @@ if len(recent) >= 3:
     parts = []
     parts.append(f'Last 7 days: {len(recent)} sessions, {total_hours:.1f}h total.')
     if late_count > 0:
-        parts.append(f'{late_count} late-night session{\"s\" if late_count != 1 else \"\"} (after {night_start}:00).')
+        suffix = 's' if late_count != 1 else ''
+        parts.append(f'{late_count} late-night session{suffix} (after {night_start}:00).')
     if longest > 180:
         parts.append(f'Longest session: {longest // 60}h {longest % 60}m.')
     if avg_length > 120:
@@ -150,9 +164,9 @@ elif [ "$IS_LATE" = true ]; then
 
 # --- Daytime, no resume, but weekly context worth surfacing ---
 elif [ -n "$WEEKLY_CONTEXT" ]; then
-  # Only surface weekly context if there's something concerning
-  LATE_COUNT=$(echo "$WEEKLY_CONTEXT" | grep -oP '\d+ late-night' | grep -oP '^\d+' || echo 0)
-  if [ "$LATE_COUNT" -gt 2 ] 2>/dev/null; then
+  # Only surface weekly context if there's something concerning (3+ late nights)
+  LATE_COUNT=$(echo "$WEEKLY_CONTEXT" | grep -oE '[0-9]+ late-night' | grep -oE '^[0-9]+' || echo "0")
+  if [ "$LATE_COUNT" -gt 2 ]; then
     echo "<pace-control-weekly>"
     echo "WEEKLY: ${WEEKLY_CONTEXT}"
     echo ""

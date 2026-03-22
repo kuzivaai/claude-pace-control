@@ -9,14 +9,25 @@
 # Resume file: ~/.claude/pace-control-resume.md
 # Ideas file: ~/.claude/pace-control-ideas.md
 
-STATE_FILE="${HOME}/.claude/pace-control-state.json"
-CONFIG_FILE="${HOME}/.claude/pace-control-config.json"
-HISTORY_FILE="${HOME}/.claude/pace-control-history.json"
-IDEAS_FILE="${HOME}/.claude/pace-control-ideas.md"
-RESUME_FILE="${HOME}/.claude/pace-control-resume.md"
+# --- Preflight: check dependencies ---
+if ! command -v python3 &>/dev/null; then
+  # Silently exit — the session-start.sh script will show the error message.
+  # We don't want to spam errors on every single tool call.
+  exit 0
+fi
 
-# Ensure state file exists
-if [ ! -f "$STATE_FILE" ]; then
+# --- Ensure ~/.claude/ directory exists ---
+CLAUDE_DIR="${HOME}/.claude"
+mkdir -p "$CLAUDE_DIR"
+
+STATE_FILE="${CLAUDE_DIR}/pace-control-state.json"
+CONFIG_FILE="${CLAUDE_DIR}/pace-control-config.json"
+HISTORY_FILE="${CLAUDE_DIR}/pace-control-history.json"
+IDEAS_FILE="${CLAUDE_DIR}/pace-control-ideas.md"
+RESUME_FILE="${CLAUDE_DIR}/pace-control-resume.md"
+
+# Ensure state file exists with valid JSON
+if [ ! -f "$STATE_FILE" ] || [ ! -s "$STATE_FILE" ]; then
   echo '{"sessionStart":0,"totalMinutes":0,"promptCount":0,"lastCheck":0}' > "$STATE_FILE"
 fi
 
@@ -63,12 +74,15 @@ if [ "$SESSION_START" -eq 0 ] || [ "$GAP" -gt "$GAP_THRESHOLD" ]; then
     PREV_START_HOUR=$(python3 -c "import time; print(time.localtime($SESSION_START).tm_hour)" 2>/dev/null || echo 12)
     if [ "$PREV_MINUTES" -gt 5 ]; then
       python3 -c "
-import json, os
+import json
 
 history_file = '$HISTORY_FILE'
 try:
-    history = json.load(open(history_file))
-except:
+    with open(history_file) as f:
+        history = json.load(f)
+    if not isinstance(history, dict) or 'sessions' not in history:
+        history = {'sessions': []}
+except (FileNotFoundError, json.JSONDecodeError, ValueError):
     history = {'sessions': []}
 
 history['sessions'].append({
@@ -113,7 +127,7 @@ with open('$STATE_FILE', 'w') as f:
 " 2>/dev/null
 
 # --- Calculate effective thresholds ---
-# Time-of-day multiplier: late night shifts thresholds down by one level
+# Time-of-day multiplier: late night shifts thresholds down
 # Mode multiplier: firm = 0.75x, strict = 0.5x
 THRESHOLD_L1=90   # Level 1: gentle awareness
 THRESHOLD_L2=120  # Level 2: evidence nudge
