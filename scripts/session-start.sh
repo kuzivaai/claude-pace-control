@@ -37,11 +37,13 @@ HAS_IDEAS=false
 NIGHT_START=23
 NIGHT_END=6
 MODE="gentle"
+GAP_THRESHOLD=1800
 
 if [ -f "$CONFIG_FILE" ]; then
   NIGHT_START=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE')).get('nightStartHour',23))" 2>/dev/null || echo 23)
   NIGHT_END=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE')).get('nightEndHour',6))" 2>/dev/null || echo 6)
   MODE=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE')).get('mode','gentle'))" 2>/dev/null || echo "gentle")
+  GAP_THRESHOLD=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE')).get('gapThreshold',1800))" 2>/dev/null || echo 1800)
 fi
 
 # --- Determine if it's late night ---
@@ -55,6 +57,35 @@ else
   if [ "$CURRENT_HOUR" -ge "$NIGHT_START" ] && [ "$CURRENT_HOUR" -lt "$NIGHT_END" ]; then
     IS_LATE=true
   fi
+fi
+
+# --- Aggregate across terminals ---
+OTHER_TERMINALS=0
+AGGREGATE_MINUTES=0
+for PEER_STATE in "$CLAUDE_DIR"/pace-control-state.*.json; do
+  [ -f "$PEER_STATE" ] || continue
+  [ "$PEER_STATE" = "$STATE_FILE" ] && continue
+  PEER_PID=$(echo "$PEER_STATE" | grep -oE '[0-9]+\.json$' | grep -oE '^[0-9]+')
+  if ! kill -0 "$PEER_PID" 2>/dev/null; then
+    rm -f "$PEER_STATE"
+    continue
+  fi
+  PEER_LAST=$(python3 -c "import json; print(json.load(open('$PEER_STATE')).get('lastCheck',0))" 2>/dev/null || echo 0)
+  if [ $((NOW - PEER_LAST)) -gt "$GAP_THRESHOLD" ]; then
+    continue
+  fi
+  PEER_MINUTES=$(python3 -c "import json; print(json.load(open('$PEER_STATE')).get('totalMinutes',0))" 2>/dev/null || echo 0)
+  OTHER_TERMINALS=$((OTHER_TERMINALS + 1))
+  AGGREGATE_MINUTES=$((AGGREGATE_MINUTES + PEER_MINUTES))
+done
+
+MULTI_TERMINAL_LINE=""
+if [ "$OTHER_TERMINALS" -gt 0 ]; then
+  OWN_MINUTES=$(python3 -c "import json; print(json.load(open('$STATE_FILE')).get('totalMinutes',0))" 2>/dev/null || echo 0)
+  TOTAL_AGGREGATE=$((AGGREGATE_MINUTES + OWN_MINUTES))
+  TOTAL_AGG_HOURS=$((TOTAL_AGGREGATE / 60))
+  TOTAL_AGG_REMAINING=$((TOTAL_AGGREGATE % 60))
+  MULTI_TERMINAL_LINE="You have ${OTHER_TERMINALS} other Claude Code session(s) running (combined total: ${TOTAL_AGG_HOURS}h ${TOTAL_AGG_REMAINING}m across all terminals)."
 fi
 
 # --- Check for resume context from previous session ---
@@ -120,6 +151,11 @@ if [ "$HAS_RESUME" = true ] || [ "$HAS_IDEAS" = true ]; then
     echo ""
   fi
 
+  if [ -n "$MULTI_TERMINAL_LINE" ]; then
+    echo "$MULTI_TERMINAL_LINE"
+    echo ""
+  fi
+
   if [ "$HAS_RESUME" = true ]; then
     echo "=== SESSION RESUME ==="
     cat "$RESUME_FILE"
@@ -156,6 +192,10 @@ elif [ "$IS_LATE" = true ]; then
     echo "WEEKLY: ${WEEKLY_CONTEXT}"
     echo ""
   fi
+  if [ -n "$MULTI_TERMINAL_LINE" ]; then
+    echo "$MULTI_TERMINAL_LINE"
+    echo ""
+  fi
   echo "INSTRUCTIONS:"
   echo "Before responding to the user's first message, gently surface the time:"
   echo ""
@@ -176,6 +216,10 @@ elif [ -n "$WEEKLY_CONTEXT" ]; then
     echo "<pace-control-weekly>"
     echo "WEEKLY: ${WEEKLY_CONTEXT}"
     echo ""
+    if [ -n "$MULTI_TERMINAL_LINE" ]; then
+      echo "$MULTI_TERMINAL_LINE"
+      echo ""
+    fi
     echo "INSTRUCTIONS:"
     echo "Briefly mention the weekly stats in your greeting if relevant."
     echo "Do not lecture. One line is enough."

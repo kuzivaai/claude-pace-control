@@ -150,6 +150,34 @@ with open('$STATE_FILE', 'w') as f:
     json.dump(state, f)
 " 2>/dev/null
 
+# --- Aggregate across terminals ---
+OTHER_TERMINALS=0
+AGGREGATE_MINUTES=0
+for PEER_STATE in "$CLAUDE_DIR"/pace-control-state.*.json; do
+  [ -f "$PEER_STATE" ] || continue
+  [ "$PEER_STATE" = "$STATE_FILE" ] && continue
+  PEER_PID=$(echo "$PEER_STATE" | grep -oE '[0-9]+\.json$' | grep -oE '^[0-9]+')
+  if ! kill -0 "$PEER_PID" 2>/dev/null; then
+    rm -f "$PEER_STATE"
+    continue
+  fi
+  PEER_LAST=$(python3 -c "import json; print(json.load(open('$PEER_STATE')).get('lastCheck',0))" 2>/dev/null || echo 0)
+  if [ $((NOW - PEER_LAST)) -gt "$GAP_THRESHOLD" ]; then
+    continue
+  fi
+  PEER_MINUTES=$(python3 -c "import json; print(json.load(open('$PEER_STATE')).get('totalMinutes',0))" 2>/dev/null || echo 0)
+  OTHER_TERMINALS=$((OTHER_TERMINALS + 1))
+  AGGREGATE_MINUTES=$((AGGREGATE_MINUTES + PEER_MINUTES))
+done
+TOTAL_AGGREGATE=$((AGGREGATE_MINUTES + ELAPSED_MINUTES))
+TOTAL_AGG_HOURS=$((TOTAL_AGGREGATE / 60))
+TOTAL_AGG_REMAINING=$((TOTAL_AGGREGATE % 60))
+
+MULTI_TERMINAL_CONTEXT=""
+if [ "$OTHER_TERMINALS" -gt 0 ]; then
+  MULTI_TERMINAL_CONTEXT="Note: You also have ${OTHER_TERMINALS} other terminal(s) running. Combined time across all: ${TOTAL_AGG_HOURS}h ${TOTAL_AGG_REMAINING}m."
+fi
+
 # --- Calculate effective thresholds ---
 # Time-of-day multiplier: late night shifts thresholds down
 # Mode multiplier: firm = 0.75x, strict = 0.5x
@@ -216,6 +244,10 @@ elif [ "$ELAPSED_MINUTES" -lt "$THRESHOLD_L3" ]; then
   echo ""
   echo "If the user seems to be wrapping up or mentions stopping, support that decision."
   echo "If they mention a new idea, suggest capturing it in ${IDEAS_FILE} for tomorrow."
+  if [ -n "$MULTI_TERMINAL_CONTEXT" ]; then
+    echo ""
+    echo "$MULTI_TERMINAL_CONTEXT"
+  fi
   echo "</pace-control>"
 
 elif [ "$ELAPSED_MINUTES" -lt "$THRESHOLD_L4" ]; then
@@ -269,6 +301,10 @@ elif [ "$ELAPSED_MINUTES" -lt "$THRESHOLD_L4" ]; then
     if [ "$MODE" = "strict" ]; then
       echo ""
       echo "STRICT MODE: Do not start new tasks. Only complete the current task, then execute Safe-Save."
+    fi
+    if [ -n "$MULTI_TERMINAL_CONTEXT" ]; then
+      echo ""
+      echo "$MULTI_TERMINAL_CONTEXT"
     fi
     echo "</pace-control>"
 
@@ -375,6 +411,10 @@ else
       echo "STRICT MODE: Do not respond to ANY new task requests. Only execute Safe-Save."
       echo "If the user asks for something new, say: 'Let's save this idea and pick it up"
       echo "with fresh eyes. What else should I capture before we wrap up?'"
+    fi
+    if [ -n "$MULTI_TERMINAL_CONTEXT" ]; then
+      echo ""
+      echo "$MULTI_TERMINAL_CONTEXT"
     fi
     echo "</pace-control>"
 
