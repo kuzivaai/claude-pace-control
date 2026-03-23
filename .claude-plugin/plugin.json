@@ -1,7 +1,7 @@
 {
   "name": "pace-control",
   "description": "Session health guardrails for Claude Code — progressive break reminders, late-night awareness, and safe wind-down protocol",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": {
     "name": "kuzivaai"
   },
