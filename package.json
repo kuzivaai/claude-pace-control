@@ -1,14 +1,20 @@
 {
   "name": "pace-control",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Session health guardrails for Claude Code — the off switch nobody else will build",
   "type": "module",
   "keywords": [
     "claude-code",
+    "claude-code-plugin",
     "session-health",
     "developer-wellness",
     "productivity",
     "break-reminder"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kuzivaai/claude-pace-control.git"
+  },
+  "homepage": "https://github.com/kuzivaai/claude-pace-control",
   "license": "MIT"
 }

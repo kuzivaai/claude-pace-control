@@ -74,16 +74,30 @@ The reason people don't stop isn't willpower. It's anxiety about losing progress
 
 ## Install
 
-**Prerequisites:** Claude Code with hooks support, Python 3, bash.
+**Prerequisites:** Claude Code v1.0.33+ with hooks support, Python 3, bash.
 
-### Step 1: Clone the repo
+### Quick Install (Plugin)
+
+The easiest way. One command, no manual configuration:
+
+```bash
+claude /plugin install --url https://github.com/kuzivaai/claude-pace-control
+```
+
+That's it. Hooks and skills are registered automatically.
+
+### Manual Install
+
+If you prefer to manage things yourself, or if your Claude Code version doesn't support plugins:
+
+#### Step 1: Clone the repo
 
 ```bash
 git clone https://github.com/kuzivaai/claude-pace-control.git ~/.claude/plugins/pace-control
 chmod +x ~/.claude/plugins/pace-control/scripts/*.sh
 ```
 
-### Step 2: Add hooks to your settings
+#### Step 2: Add hooks to your settings
 
 Add these hooks to `~/.claude/settings.json` (create the file if it doesn't exist, or merge with existing hooks):
 
@@ -116,7 +130,7 @@ Add these hooks to `~/.claude/settings.json` (create the file if it doesn't exis
 }
 ```
 
-### Step 3: Verify
+#### Step 3: Verify
 
 Start a Claude Code session. You should see **no output**. Level 0 is silent for the first 90 minutes (45 at night). That means it's working.
 
