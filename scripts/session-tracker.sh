@@ -213,56 +213,93 @@ elif [ "$ELAPSED_MINUTES" -lt "$THRESHOLD_L3" ]; then
   echo "</pace-control>"
 
 elif [ "$ELAPSED_MINUTES" -lt "$THRESHOLD_L4" ]; then
-  # Level 3: Firm with SAFE-SAVE protocol
-  echo "<pace-control>"
-  echo "SESSION: ${ELAPSED_HOURS}h ${REMAINING_MINUTES}m | ${PROMPT_COUNT} prompts"
-  echo ""
-  if [ "$IS_LATE" = true ]; then
-    echo "IMPORTANT — It's ${TIMESTR} and this session has been running for over ${ELAPSED_HOURS}h ${REMAINING_MINUTES}m."
+  # Level 3: Firm with SAFE-SAVE protocol (first time) or micro-loop (subsequent)
+  if [ "$WIND_DOWN_SHOWN" != "True" ]; then
+    # --- First fire: full Safe-Save messaging ---
+    echo "<pace-control>"
+    echo "SESSION: ${ELAPSED_HOURS}h ${REMAINING_MINUTES}m | ${PROMPT_COUNT} prompts"
     echo ""
-    echo "At this hour and duration:"
-    echo "- Sleep deprivation impairs cognition as much as alcohol intoxication"
-    echo "- Error rates at this hour are typically 2-3x your daytime baseline"
-    echo "- The 'one more prompt' urge is strongest when you're most tired"
+    if [ "$IS_LATE" = true ]; then
+      echo "IMPORTANT — It's ${TIMESTR} and this session has been running for over ${ELAPSED_HOURS}h ${REMAINING_MINUTES}m."
+      echo ""
+      echo "At this hour and duration:"
+      echo "- Sleep deprivation impairs cognition as much as alcohol intoxication"
+      echo "- Error rates at this hour are typically 2-3x your daytime baseline"
+      echo "- The 'one more prompt' urge is strongest when you're most tired"
+    else
+      echo "IMPORTANT — This session has been running for over ${ELAPSED_HOURS}h ${REMAINING_MINUTES}m."
+      echo ""
+      echo "At this duration:"
+      echo "- Error rates typically increase 2-3x vs your first hour"
+      echo "- Token waste from retries accumulates"
+      echo "- Decisions made now are more likely to need reverting tomorrow"
+    fi
+    echo ""
+    echo "SAFE-SAVE PROTOCOL — When responding, naturally work towards wrapping up:"
+    echo ""
+    echo "1. SAVE WORK: If there are uncommitted changes, run 'git status' and suggest committing."
+    echo "   Use a descriptive commit message summarising what was accomplished."
+    echo ""
+    echo "2. SAVE CONTEXT: Write a resume file to ${RESUME_FILE} containing:"
+    echo "   - What was being worked on (feature/bug/task)"
+    echo "   - Current state (what's done, what's in progress)"
+    echo "   - Next steps (what to do when resuming)"
+    echo "   - Any open questions or decisions pending"
+    echo "   - Files that were being modified"
+    echo "   Format: markdown with clear sections."
+    echo ""
+    echo "3. SAVE IDEAS: Ask 'Any ideas racing through your mind? I'll save them so you won't lose them.'"
+    echo "   Append to ${IDEAS_FILE} with timestamp."
+    echo ""
+    if [ "$IS_LATE" = true ]; then
+      echo "Example response: 'It's ${TIMESTR} and we've been at this ${ELAPSED_HOURS}h ${REMAINING_MINUTES}m."
+      echo "Let me save everything so you can pick up fresh tomorrow. Your future self will thank you.'"
+    else
+      echo "Example response: 'We've been at this for ${ELAPSED_HOURS}h ${REMAINING_MINUTES}m — solid progress."
+      echo "Let me save everything so you can pick up right where we left off.'"
+    fi
+    echo ""
+    echo "If the user wants to continue, respect their autonomy but suggest committing current work first."
+    if [ "$MODE" = "strict" ]; then
+      echo ""
+      echo "STRICT MODE: Do not start new tasks. Only complete the current task, then execute Safe-Save."
+    fi
+    echo "</pace-control>"
+
+    # Set micro-loop state for subsequent calls
+    WIND_DOWN_SHOWN="True"
+    WIND_DOWN_LEVEL=3
+    NEXT_NUDGE_AT=$(python3 -c "import random; print($PROMPT_COUNT + random.randint(3, 7))" 2>/dev/null)
   else
-    echo "IMPORTANT — This session has been running for over ${ELAPSED_HOURS}h ${REMAINING_MINUTES}m."
-    echo ""
-    echo "At this duration:"
-    echo "- Error rates typically increase 2-3x vs your first hour"
-    echo "- Token waste from retries accumulates"
-    echo "- Decisions made now are more likely to need reverting tomorrow"
+    # --- Micro-loop: variable-interval nudges ---
+    if [ "$PROMPT_COUNT" -ge "$NEXT_NUDGE_AT" ]; then
+      # Time to nudge
+      NUDGE_INDEX=$((WIND_DOWN_PROMPT_COUNT % 3))
+      echo "<pace-control>"
+      if [ "$IS_LATE" = true ]; then
+        PREFIX="It's ${TIMESTR}. SESSION: ${ELAPSED_HOURS}h ${REMAINING_MINUTES}m | ${PROMPT_COUNT} prompts"
+      else
+        PREFIX="SESSION: ${ELAPSED_HOURS}h ${REMAINING_MINUTES}m | ${PROMPT_COUNT} prompts"
+      fi
+      case $NUDGE_INDEX in
+        0)
+          echo "${PREFIX} — Still here. When you finish what you're working on, say 'wrap up' and I'll save everything in 30 seconds."
+          ;;
+        1)
+          echo "${PREFIX} — Quick checkpoint: what's the ONE thing to finish before stopping? Let's aim for that, then save."
+          ;;
+        2)
+          echo "${PREFIX} — Your future self will solve this faster after a break. Say 'wrap up' when ready."
+          ;;
+      esac
+      echo "</pace-control>"
+
+      # Schedule next nudge
+      WIND_DOWN_PROMPT_COUNT=$((WIND_DOWN_PROMPT_COUNT + 1))
+      NEXT_NUDGE_AT=$(python3 -c "import random; print($PROMPT_COUNT + random.randint(3, 7))" 2>/dev/null)
+    fi
+    # else: silent — no output, exit 0
   fi
-  echo ""
-  echo "SAFE-SAVE PROTOCOL — When responding, naturally work towards wrapping up:"
-  echo ""
-  echo "1. SAVE WORK: If there are uncommitted changes, run 'git status' and suggest committing."
-  echo "   Use a descriptive commit message summarising what was accomplished."
-  echo ""
-  echo "2. SAVE CONTEXT: Write a resume file to ${RESUME_FILE} containing:"
-  echo "   - What was being worked on (feature/bug/task)"
-  echo "   - Current state (what's done, what's in progress)"
-  echo "   - Next steps (what to do when resuming)"
-  echo "   - Any open questions or decisions pending"
-  echo "   - Files that were being modified"
-  echo "   Format: markdown with clear sections."
-  echo ""
-  echo "3. SAVE IDEAS: Ask 'Any ideas racing through your mind? I'll save them so you won't lose them.'"
-  echo "   Append to ${IDEAS_FILE} with timestamp."
-  echo ""
-  if [ "$IS_LATE" = true ]; then
-    echo "Example response: 'It's ${TIMESTR} and we've been at this ${ELAPSED_HOURS}h ${REMAINING_MINUTES}m."
-    echo "Let me save everything so you can pick up fresh tomorrow. Your future self will thank you.'"
-  else
-    echo "Example response: 'We've been at this for ${ELAPSED_HOURS}h ${REMAINING_MINUTES}m — solid progress."
-    echo "Let me save everything so you can pick up right where we left off.'"
-  fi
-  echo ""
-  echo "If the user wants to continue, respect their autonomy but suggest committing current work first."
-  if [ "$MODE" = "strict" ]; then
-    echo ""
-    echo "STRICT MODE: Do not start new tasks. Only complete the current task, then execute Safe-Save."
-  fi
-  echo "</pace-control>"
 
 else
   # Level 4: Strong recommendation with full wind-down
@@ -326,3 +363,26 @@ else
   fi
   echo "</pace-control>"
 fi
+
+# --- Re-persist state if intervention logic modified it ---
+if [ "$WIND_DOWN_SHOWN" = "True" ]; then
+  WIND_DOWN_SHOWN_PY="True"
+else
+  WIND_DOWN_SHOWN_PY="False"
+fi
+
+python3 -c "
+import json
+state = {
+    'sessionStart': $SESSION_START,
+    'totalMinutes': $ELAPSED_MINUTES,
+    'promptCount': $PROMPT_COUNT,
+    'lastCheck': $NOW,
+    'windDownShown': $WIND_DOWN_SHOWN_PY,
+    'windDownPromptCount': $WIND_DOWN_PROMPT_COUNT,
+    'nextNudgeAt': $NEXT_NUDGE_AT,
+    'windDownLevel': $WIND_DOWN_LEVEL,
+}
+with open('$STATE_FILE', 'w') as f:
+    json.dump(state, f)
+" 2>/dev/null
