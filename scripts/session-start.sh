@@ -103,8 +103,9 @@ fi
 
 # --- Build weekly stats ---
 WEEKLY_CONTEXT=""
+STREAK_CONTEXT=""
 if [ -f "$HISTORY_FILE" ]; then
-  WEEKLY_CONTEXT=$(python3 -c "
+  IFS=$'\t' read -r WEEKLY_CONTEXT STREAK_CONTEXT < <(python3 -c "
 import json
 
 now = $NOW
@@ -115,11 +116,12 @@ try:
     history = json.load(open('$HISTORY_FILE'))
     sessions = history.get('sessions', [])
 except:
+    history = {}
     sessions = []
 
-# Filter to last 7 days
+# Weekly stats
+weekly = ''
 recent = [s for s in sessions if s.get('end', 0) > week_ago]
-
 if len(recent) >= 3:
     total_hours = sum(s.get('minutes', 0) for s in recent) / 60
     late_count = sum(1 for s in recent if s.get('startHour', 12) >= night_start or s.get('startHour', 12) < 6)
@@ -135,8 +137,21 @@ if len(recent) >= 3:
         parts.append(f'Longest session: {longest // 60}h {longest % 60}m.')
     if avg_length > 120:
         parts.append(f'Average session: {avg_length:.0f}m — trending long.')
+    weekly = ' '.join(parts)
 
-    print(' '.join(parts))
+# Streak
+streak_line = ''
+streak = history.get('streak', {'current': 0, 'best': 0})
+current = streak.get('current', 0)
+best = streak.get('best', 0)
+if current >= 2:
+    streak_line = f'Healthy stop streak: {current} sessions in a row.'
+elif current == 0 and best >= 2:
+    streak_line = f'Last session ran long. Previous best: {best} sessions. Fresh start now.'
+
+# Print tab-separated
+print(weekly, end='\t')
+print(streak_line)
 " 2>/dev/null)
 fi
 
@@ -148,6 +163,9 @@ if [ "$HAS_RESUME" = true ] || [ "$HAS_IDEAS" = true ]; then
 
   if [ -n "$WEEKLY_CONTEXT" ]; then
     echo "WEEKLY: ${WEEKLY_CONTEXT}"
+    if [ -n "$STREAK_CONTEXT" ]; then
+      echo "STREAK: ${STREAK_CONTEXT}"
+    fi
     echo ""
   fi
 
@@ -190,6 +208,9 @@ elif [ "$IS_LATE" = true ]; then
   echo ""
   if [ -n "$WEEKLY_CONTEXT" ]; then
     echo "WEEKLY: ${WEEKLY_CONTEXT}"
+    if [ -n "$STREAK_CONTEXT" ]; then
+      echo "STREAK: ${STREAK_CONTEXT}"
+    fi
     echo ""
   fi
   if [ -n "$MULTI_TERMINAL_LINE" ]; then
@@ -208,13 +229,18 @@ elif [ "$IS_LATE" = true ]; then
   echo "Do NOT be preachy. One mention of the time, then move on."
   echo "</pace-control-late-start>"
 
-# --- Daytime, no resume, but weekly context worth surfacing ---
-elif [ -n "$WEEKLY_CONTEXT" ]; then
-  # Only surface weekly context if there's something concerning (3+ late nights)
+# --- Daytime, no resume, but weekly context or streak worth surfacing ---
+elif [ -n "$WEEKLY_CONTEXT" ] || [ -n "$STREAK_CONTEXT" ]; then
+  # Only surface weekly context if there's something concerning (3+ late nights) or streak info
   LATE_COUNT=$(echo "$WEEKLY_CONTEXT" | grep -oE '[0-9]+ late-night' | grep -oE '^[0-9]+' || echo "0")
-  if [ "$LATE_COUNT" -gt 2 ]; then
+  if [ "$LATE_COUNT" -gt 2 ] || [ -n "$STREAK_CONTEXT" ]; then
     echo "<pace-control-weekly>"
-    echo "WEEKLY: ${WEEKLY_CONTEXT}"
+    if [ -n "$WEEKLY_CONTEXT" ]; then
+      echo "WEEKLY: ${WEEKLY_CONTEXT}"
+    fi
+    if [ -n "$STREAK_CONTEXT" ]; then
+      echo "STREAK: ${STREAK_CONTEXT}"
+    fi
     echo ""
     if [ -n "$MULTI_TERMINAL_LINE" ]; then
       echo "$MULTI_TERMINAL_LINE"
