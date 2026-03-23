@@ -95,13 +95,28 @@ try:
 except (FileNotFoundError, json.JSONDecodeError, ValueError):
     history = {'sessions': []}
 
+# Determine if session ended healthily (before L4)
+# WIND_DOWN_LEVEL is read from previous session's state BEFORE reset
+healthy = ($WIND_DOWN_LEVEL < 4)
+
 history['sessions'].append({
     'start': $SESSION_START,
     'end': $LAST_CHECK,
     'minutes': $PREV_MINUTES,
     'prompts': $PROMPT_COUNT,
     'startHour': $PREV_START_HOUR,
+    'healthyStop': healthy,
 })
+
+# Update streak
+streak = history.get('streak', {'current': 0, 'best': 0, 'lastUpdated': 0})
+if healthy:
+    streak['current'] += 1
+    streak['best'] = max(streak['best'], streak['current'])
+else:
+    streak['current'] = 0
+streak['lastUpdated'] = $NOW
+history['streak'] = streak
 
 # Keep only last 30 days
 cutoff = $NOW - 30 * 86400
