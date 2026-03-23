@@ -17,6 +17,10 @@ trap "rm -rf '$TEMP_HOME'" EXIT
 CLAUDE_DIR="$HOME/.claude"
 mkdir -p "$CLAUDE_DIR"
 
+# The tracker uses PPID-stamped state files (pace-control-state.{PPID}.json).
+# Tests seed state via the old un-stamped filename so the tracker's migration
+# logic picks it up.  After running the tracker, find_tracker_state locates
+# the PID-stamped file the tracker actually wrote.
 STATE_FILE="$CLAUDE_DIR/pace-control-state.json"
 CONFIG_FILE="$CLAUDE_DIR/pace-control-config.json"
 HISTORY_FILE="$CLAUDE_DIR/pace-control-history.json"
@@ -66,6 +70,7 @@ assert_not_output() {
 
 cleanup() {
   rm -f "$STATE_FILE" "$CONFIG_FILE" "$HISTORY_FILE" "$RESUME_FILE" "$IDEAS_FILE"
+  rm -f "$CLAUDE_DIR"/pace-control-state.*.json
 }
 
 setup_state() {
@@ -87,6 +92,15 @@ setup_night_config() {
 
 setup_day_config() {
   rm -f "$CONFIG_FILE"
+}
+
+# After running the tracker, find the PID-stamped state file it created
+find_tracker_state() {
+  local f
+  for f in "$CLAUDE_DIR"/pace-control-state.*.json; do
+    [ -f "$f" ] && echo "$f" && return
+  done
+  echo "$STATE_FILE"  # fallback
 }
 
 echo "=== Pace Control Structural Tests ==="
@@ -121,7 +135,8 @@ assert_output "L3 daytime first-fire" "SAFE-SAVE PROTOCOL" "$OUTPUT"
 assert_not_output "L3 daytime — not L4" "MANDATORY" "$OUTPUT"
 
 # Verify state was updated with windDownShown=true
-WDS=$(python3 -c "import json; print(json.load(open('$STATE_FILE')).get('windDownShown', False))" 2>/dev/null)
+ACTUAL_STATE=$(find_tracker_state)
+WDS=$(python3 -c "import json; print(json.load(open('$ACTUAL_STATE')).get('windDownShown', False))" 2>/dev/null)
 if [ "$WDS" = "True" ]; then
   PASS=$((PASS + 1))
 else
@@ -267,12 +282,76 @@ START=$((LAST - 3600))  # Session started 1h before last check
 echo "{\"sessionStart\":${START},\"totalMinutes\":60,\"promptCount\":20,\"lastCheck\":${LAST},\"windDownShown\":true,\"windDownPromptCount\":5,\"nextNudgeAt\":25,\"windDownLevel\":3}" > "$STATE_FILE"
 OUTPUT=$(bash "$TRACKER" 2>/dev/null)
 # After gap, windDownShown should be reset
-WDS=$(python3 -c "import json; print(json.load(open('$STATE_FILE')).get('windDownShown', 'MISSING'))" 2>/dev/null)
+ACTUAL_STATE=$(find_tracker_state)
+WDS=$(python3 -c "import json; print(json.load(open('$ACTUAL_STATE')).get('windDownShown', 'MISSING'))" 2>/dev/null)
 if [ "$WDS" = "False" ]; then
   PASS=$((PASS + 1))
 else
   FAIL=$((FAIL + 1))
   ERRORS="${ERRORS}\nFAIL: Gap detection — windDownShown not reset (got: $WDS)"
+fi
+
+# --- Multi-terminal: aggregation shows combined time ---
+cleanup
+setup_state 150 25  # Own terminal at 150m (L2)
+# Create a peer state file with a live PID (use test script's own PID, guaranteed alive)
+echo "{\"sessionStart\":$((NOW - 7200)),\"totalMinutes\":120,\"promptCount\":20,\"lastCheck\":$((NOW - 60))}" > "$CLAUDE_DIR/pace-control-state.$$.json"
+OUTPUT=$(bash "$TRACKER" 2>/dev/null)
+assert_output "Multi-terminal aggregation" "other terminal" "$OUTPUT"
+rm -f "$CLAUDE_DIR/pace-control-state.$$.json"
+
+# --- Stale detection: dead PID file is removed ---
+cleanup
+setup_state 150 25
+echo "{\"sessionStart\":$((NOW - 3600)),\"totalMinutes\":60,\"promptCount\":10,\"lastCheck\":$((NOW - 60))}" > "$CLAUDE_DIR/pace-control-state.99999999.json"
+OUTPUT=$(bash "$TRACKER" 2>/dev/null)
+if [ ! -f "$CLAUDE_DIR/pace-control-state.99999999.json" ]; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1))
+  ERRORS="${ERRORS}\nFAIL: Stale detection — dead PID file not removed"
+fi
+
+# --- Migration: old state file renamed ---
+cleanup
+echo "{\"sessionStart\":$((NOW - 600)),\"totalMinutes\":10,\"promptCount\":5,\"lastCheck\":$((NOW - 30))}" > "$CLAUDE_DIR/pace-control-state.json"
+OUTPUT=$(bash "$TRACKER" 2>/dev/null)
+if [ ! -f "$CLAUDE_DIR/pace-control-state.json" ]; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1))
+  ERRORS="${ERRORS}\nFAIL: Migration — old state file not removed"
+fi
+
+# --- Streak: healthy stop increments streak ---
+cleanup
+echo '{"sessions":[],"streak":{"current":3,"best":5,"lastUpdated":0}}' > "$HISTORY_FILE"
+LAST=$((NOW - 2100))
+GSTART=$((LAST - 3600))
+echo "{\"sessionStart\":${GSTART},\"totalMinutes\":60,\"promptCount\":20,\"lastCheck\":${LAST},\"windDownShown\":false,\"windDownPromptCount\":0,\"nextNudgeAt\":0,\"windDownLevel\":0}" > "$STATE_FILE"
+OUTPUT=$(bash "$TRACKER" 2>/dev/null)
+STREAK_CURRENT=$(python3 -c "import json; print(json.load(open('$HISTORY_FILE')).get('streak',{}).get('current',0))" 2>/dev/null)
+if [ "$STREAK_CURRENT" = "4" ]; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1))
+  ERRORS="${ERRORS}\nFAIL: Streak — healthy stop should increment to 4 (got: $STREAK_CURRENT)"
+fi
+
+# --- Streak: unhealthy stop resets streak ---
+cleanup
+echo '{"sessions":[],"streak":{"current":3,"best":5,"lastUpdated":0}}' > "$HISTORY_FILE"
+LAST=$((NOW - 2100))
+GSTART=$((LAST - 14400))
+echo "{\"sessionStart\":${GSTART},\"totalMinutes\":240,\"promptCount\":60,\"lastCheck\":${LAST},\"windDownShown\":true,\"windDownPromptCount\":5,\"nextNudgeAt\":65,\"windDownLevel\":4}" > "$STATE_FILE"
+OUTPUT=$(bash "$TRACKER" 2>/dev/null)
+STREAK_CURRENT=$(python3 -c "import json; print(json.load(open('$HISTORY_FILE')).get('streak',{}).get('current',0))" 2>/dev/null)
+STREAK_BEST=$(python3 -c "import json; print(json.load(open('$HISTORY_FILE')).get('streak',{}).get('best',0))" 2>/dev/null)
+if [ "$STREAK_CURRENT" = "0" ] && [ "$STREAK_BEST" = "5" ]; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1))
+  ERRORS="${ERRORS}\nFAIL: Streak — unhealthy stop should reset to 0, best at 5 (got: current=$STREAK_CURRENT, best=$STREAK_BEST)"
 fi
 
 # --- Results ---
