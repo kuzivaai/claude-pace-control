@@ -303,65 +303,107 @@ elif [ "$ELAPSED_MINUTES" -lt "$THRESHOLD_L4" ]; then
 
 else
   # Level 4: Strong recommendation with full wind-down
-  echo "<pace-control>"
-  echo "SESSION: ${ELAPSED_HOURS}h ${REMAINING_MINUTES}m | ${PROMPT_COUNT} prompts"
-  echo ""
-  if [ "$IS_LATE" = true ]; then
-    echo "STRONG RECOMMENDATION — It's ${TIMESTR}. This session has been running for over ${ELAPSED_HOURS} hours."
+  if [ "$WIND_DOWN_SHOWN" = "True" ] && [ "$WIND_DOWN_LEVEL" -eq 3 ]; then
+    # Crossed from L3 micro-loop into L4 territory — reset for L4 first-fire
+    # Guard: only reset when windDownLevel==3, NOT when already at 4 (prevents infinite L4 first-fires)
+    WIND_DOWN_SHOWN="False"
+    WIND_DOWN_PROMPT_COUNT=0
+  fi
+
+  if [ "$WIND_DOWN_SHOWN" != "True" ]; then
+    # --- L4 first-fire: full mandatory wind-down ---
+    echo "<pace-control>"
+    echo "SESSION: ${ELAPSED_HOURS}h ${REMAINING_MINUTES}m | ${PROMPT_COUNT} prompts"
     echo ""
-    echo "At this point:"
-    echo "- You are sleep-deprived and in the diminishing returns zone"
-    echo "- Code written between midnight and 5am has the highest defect rate of any time block"
-    echo "- Tomorrow you will likely revert or rewrite what you're doing right now"
-    echo "- The 'one more prompt' urge is variable reinforcement — same pattern as slot machines"
+    if [ "$IS_LATE" = true ]; then
+      echo "STRONG RECOMMENDATION — It's ${TIMESTR}. This session has been running for over ${ELAPSED_HOURS} hours."
+      echo ""
+      echo "At this point:"
+      echo "- You are sleep-deprived and in the diminishing returns zone"
+      echo "- Code written between midnight and 5am has the highest defect rate of any time block"
+      echo "- Tomorrow you will likely revert or rewrite what you're doing right now"
+      echo "- The 'one more prompt' urge is variable reinforcement — same pattern as slot machines"
+    else
+      echo "STRONG RECOMMENDATION — This session has been running for over ${ELAPSED_HOURS} hours."
+      echo ""
+      echo "At this point:"
+      echo "- You are in the diminishing returns zone"
+      echo "- Code written now has significantly higher defect rates"
+      echo "- The 'one more prompt' urge is variable reinforcement — same pattern as slot machines"
+    fi
+    echo ""
+    echo "MANDATORY SAFE-SAVE — Before any other response, execute this:"
+    echo ""
+    echo "1. Run 'git status' to check for uncommitted changes"
+    echo "2. If changes exist, commit them with a clear message"
+    echo "3. Write a detailed resume file to ${RESUME_FILE} containing:"
+    echo "   ## Session Resume — $(date '+%Y-%m-%d %H:%M')"
+    echo "   ### What We Were Working On"
+    echo "   [describe the current task/feature]"
+    echo "   ### Current State"
+    echo "   [what's done, what's partially done]"
+    echo "   ### Next Steps"
+    echo "   [exactly what to do when resuming — be specific]"
+    echo "   ### Modified Files"
+    echo "   [list files that were changed]"
+    echo "   ### Open Questions"
+    echo "   [any decisions that need to be made]"
+    echo ""
+    echo "4. Ask the user: 'What ideas should we save for next time?'"
+    echo "   Append to ${IDEAS_FILE} with timestamp."
+    echo ""
+    if [ "$IS_LATE" = true ]; then
+      echo "5. Tell the user: 'Everything is saved. It's ${TIMESTR} — go to bed."
+      echo "   When you start a new session, I'll show you exactly where we left off."
+      echo "   You'll solve this faster with sleep than caffeine. The ideas are safe.'"
+    else
+      echo "5. Tell the user: 'Everything is saved. When you start a new session, I'll show you"
+      echo "   exactly where we left off. A 20-minute break will make the next hour more productive"
+      echo "   than pushing through. The ideas are safe.'"
+    fi
+    echo ""
+    echo "Do NOT skip the safe-save steps. The user needs to feel confident nothing will be lost."
+    echo "This is what gives them permission to stop."
+    if [ "$MODE" = "strict" ]; then
+      echo ""
+      echo "STRICT MODE: Do not respond to ANY new task requests. Only execute Safe-Save."
+      echo "If the user asks for something new, say: 'Let's save this idea and pick it up"
+      echo "with fresh eyes. What else should I capture before we wrap up?'"
+    fi
+    echo "</pace-control>"
+
+    # Set micro-loop state for subsequent L4 calls
+    WIND_DOWN_SHOWN="True"
+    WIND_DOWN_LEVEL=4
+    NEXT_NUDGE_AT=$(python3 -c "import random; print($PROMPT_COUNT + random.randint(3, 7))" 2>/dev/null)
   else
-    echo "STRONG RECOMMENDATION — This session has been running for over ${ELAPSED_HOURS} hours."
-    echo ""
-    echo "At this point:"
-    echo "- You are in the diminishing returns zone"
-    echo "- Code written now has significantly higher defect rates"
-    echo "- The 'one more prompt' urge is variable reinforcement — same pattern as slot machines"
+    # --- L4 micro-loop: same variable-interval nudges ---
+    if [ "$PROMPT_COUNT" -ge "$NEXT_NUDGE_AT" ]; then
+      NUDGE_INDEX=$((WIND_DOWN_PROMPT_COUNT % 3))
+      echo "<pace-control>"
+      if [ "$IS_LATE" = true ]; then
+        PREFIX="It's ${TIMESTR}. SESSION: ${ELAPSED_HOURS}h ${REMAINING_MINUTES}m | ${PROMPT_COUNT} prompts"
+      else
+        PREFIX="SESSION: ${ELAPSED_HOURS}h ${REMAINING_MINUTES}m | ${PROMPT_COUNT} prompts"
+      fi
+      case $NUDGE_INDEX in
+        0)
+          echo "${PREFIX} — Still here. When you finish what you're working on, say 'wrap up' and I'll save everything in 30 seconds."
+          ;;
+        1)
+          echo "${PREFIX} — Quick checkpoint: what's the ONE thing to finish before stopping? Let's aim for that, then save."
+          ;;
+        2)
+          echo "${PREFIX} — Your future self will solve this faster after a break. Say 'wrap up' when ready."
+          ;;
+      esac
+      echo "</pace-control>"
+
+      WIND_DOWN_PROMPT_COUNT=$((WIND_DOWN_PROMPT_COUNT + 1))
+      NEXT_NUDGE_AT=$(python3 -c "import random; print($PROMPT_COUNT + random.randint(3, 7))" 2>/dev/null)
+    fi
+    # else: silent
   fi
-  echo ""
-  echo "MANDATORY SAFE-SAVE — Before any other response, execute this:"
-  echo ""
-  echo "1. Run 'git status' to check for uncommitted changes"
-  echo "2. If changes exist, commit them with a clear message"
-  echo "3. Write a detailed resume file to ${RESUME_FILE} containing:"
-  echo "   ## Session Resume — $(date '+%Y-%m-%d %H:%M')"
-  echo "   ### What We Were Working On"
-  echo "   [describe the current task/feature]"
-  echo "   ### Current State"
-  echo "   [what's done, what's partially done]"
-  echo "   ### Next Steps"
-  echo "   [exactly what to do when resuming — be specific]"
-  echo "   ### Modified Files"
-  echo "   [list files that were changed]"
-  echo "   ### Open Questions"
-  echo "   [any decisions that need to be made]"
-  echo ""
-  echo "4. Ask the user: 'What ideas should we save for next time?'"
-  echo "   Append to ${IDEAS_FILE} with timestamp."
-  echo ""
-  if [ "$IS_LATE" = true ]; then
-    echo "5. Tell the user: 'Everything is saved. It's ${TIMESTR} — go to bed."
-    echo "   When you start a new session, I'll show you exactly where we left off."
-    echo "   You'll solve this faster with sleep than caffeine. The ideas are safe.'"
-  else
-    echo "5. Tell the user: 'Everything is saved. When you start a new session, I'll show you"
-    echo "   exactly where we left off. A 20-minute break will make the next hour more productive"
-    echo "   than pushing through. The ideas are safe.'"
-  fi
-  echo ""
-  echo "Do NOT skip the safe-save steps. The user needs to feel confident nothing will be lost."
-  echo "This is what gives them permission to stop."
-  if [ "$MODE" = "strict" ]; then
-    echo ""
-    echo "STRICT MODE: Do not respond to ANY new task requests. Only execute Safe-Save."
-    echo "If the user asks for something new, say: 'Let's save this idea and pick it up"
-    echo "with fresh eyes. What else should I capture before we wrap up?'"
-  fi
-  echo "</pace-control>"
 fi
 
 # --- Re-persist state if intervention logic modified it ---
