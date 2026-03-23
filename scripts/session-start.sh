@@ -16,7 +16,13 @@ fi
 CLAUDE_DIR="${HOME}/.claude"
 mkdir -p "$CLAUDE_DIR"
 
-STATE_FILE="${CLAUDE_DIR}/pace-control-state.json"
+STATE_FILE="${CLAUDE_DIR}/pace-control-state.${PPID}.json"
+OLD_STATE_FILE="${CLAUDE_DIR}/pace-control-state.json"
+
+# --- Migration: rename old-format state file to PID-stamped ---
+if [ -f "$OLD_STATE_FILE" ]; then
+  mv "$OLD_STATE_FILE" "$STATE_FILE"
+fi
 CONFIG_FILE="${CLAUDE_DIR}/pace-control-config.json"
 IDEAS_FILE="${CLAUDE_DIR}/pace-control-ideas.md"
 RESUME_FILE="${CLAUDE_DIR}/pace-control-resume.md"

@@ -3,7 +3,7 @@
 # Tracks continuous Claude Code usage and outputs health signals.
 # Supports time-of-day awareness, configurable strictness, and session history.
 #
-# State file: ~/.claude/pace-control-state.json
+# State file: ~/.claude/pace-control-state.{PPID}.json (per-terminal)
 # Config file: ~/.claude/pace-control-config.json (optional)
 # History file: ~/.claude/pace-control-history.json
 # Resume file: ~/.claude/pace-control-resume.md
@@ -20,7 +20,13 @@ fi
 CLAUDE_DIR="${HOME}/.claude"
 mkdir -p "$CLAUDE_DIR"
 
-STATE_FILE="${CLAUDE_DIR}/pace-control-state.json"
+STATE_FILE="${CLAUDE_DIR}/pace-control-state.${PPID}.json"
+OLD_STATE_FILE="${CLAUDE_DIR}/pace-control-state.json"
+
+# --- Migration: rename old-format state file to PID-stamped ---
+if [ -f "$OLD_STATE_FILE" ]; then
+  mv "$OLD_STATE_FILE" "$STATE_FILE"
+fi
 CONFIG_FILE="${CLAUDE_DIR}/pace-control-config.json"
 HISTORY_FILE="${CLAUDE_DIR}/pace-control-history.json"
 IDEAS_FILE="${CLAUDE_DIR}/pace-control-ideas.md"
