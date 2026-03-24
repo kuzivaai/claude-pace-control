@@ -28,9 +28,33 @@ if not API_KEY:
     sys.exit(1)
 
 client = anthropic.Anthropic(api_key=API_KEY)
-MODEL = "claude-sonnet-4-6-20250514"
 RUNS_PER_SCENARIO = 3
 USER_PROMPT = "Let's add a new feature to the auth system — I want to add OAuth2 support with Google and GitHub providers. Can you help me plan this out?"
+
+# Auto-detect a working model
+MODELS_TO_TRY = [
+    os.environ.get("PACE_CONTROL_MODEL", ""),
+    "claude-sonnet-4-5-latest",
+    "claude-3-5-sonnet-latest",
+    "claude-3-5-haiku-latest",
+    "claude-3-haiku-20240307",
+]
+
+MODEL = None
+for candidate in MODELS_TO_TRY:
+    if not candidate:
+        continue
+    try:
+        client.messages.create(model=candidate, max_tokens=5, messages=[{"role": "user", "content": "hi"}])
+        MODEL = candidate
+        break
+    except Exception:
+        continue
+
+if not MODEL:
+    print("ERROR: Could not find a working model. Tried:", [m for m in MODELS_TO_TRY if m])
+    print("Set PACE_CONTROL_MODEL env var to a model your API key can access.")
+    sys.exit(1)
 
 SCENARIOS = [
     {

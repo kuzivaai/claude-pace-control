@@ -208,9 +208,19 @@ Check your session health anytime with the `/pace-check` skill. Copy `skills/pac
 /pace-check
 ```
 
+## Why not just use a break timer?
+
+Tools like Stretchly, DeskBreak, and Pomodoro apps remind you to take breaks. They work for general computer use. They don't work for AI-assisted coding because:
+
+- **They're external.** A notification you dismiss in one click. Pace Control lives inside Claude's response — you can't ignore it without reading it.
+- **They're dumb.** Fixed intervals regardless of what you're doing. Pace Control is silent for the first 90 minutes because that's when you're productive.
+- **They don't save anything.** When a break timer goes off, you still have to manually save your work, remember where you were, and capture your ideas. Pace Control does all of that.
+- **They don't know it's 3am.** Pace Control shifts all thresholds down 40% at night and references sleep deprivation research instead of generic productivity stats.
+
+Other Claude Code tools like [claude-pulse](https://github.com/NoobyGains/claude-pulse) and [claude_timings_wrapper](https://github.com/martinambrus/claude_timings_wrapper) track time and usage limits — but they never act on it. They show you data. Pace Control intervenes.
+
 ## Known Limitations
 
-- **Multi-terminal:** Sessions are tracked per-terminal with aggregate stats surfaced when multiple terminals are active. Stale terminals are detected and cleaned up automatically.
 - **Claude Code only:** This uses Claude Code's hook system. It won't work with Cursor, Copilot, or other AI coding tools.
 - **System clock:** Thresholds use your local system time. If you travel across time zones, night mode shifts with you.
 - **Python 3 required:** Used for JSON parsing. The scripts will show a clear error message if Python 3 isn't found.
