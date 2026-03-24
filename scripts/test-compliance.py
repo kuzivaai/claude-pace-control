@@ -110,7 +110,7 @@ def generate_pace_control_output(elapsed_min, is_night):
             "nextNudgeAt": 0,
             "windDownLevel": 0,
         }
-        state_file = os.path.join(claude_dir, "pace-control-state.json")
+        state_file = os.path.join(claude_dir, f"pace-control-state.{os.getpid()}.json")
         with open(state_file, "w") as f:
             json.dump(state, f)
 

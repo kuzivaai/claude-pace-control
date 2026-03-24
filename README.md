@@ -57,6 +57,30 @@ The reason people don't stop isn't willpower. It's anxiety about losing progress
 3. **Captures ideas.** *"Any thoughts racing? I'll save them so you won't lose them."*
 4. **Resumes next time.** Your next Claude Code session opens with full context: *"Welcome back. Last time you were working on X, you finished Y, and the next step is Z."*
 
+### Micro-Loop at Level 3+
+
+After the first Safe-Save message, Pace Control doesn't keep repeating the same wall of text. It switches to short, variable-interval check-ins every 3-7 prompts:
+
+> *"SESSION: 3h 25m | 52 prompts — Still here. When you finish what you're working on, say 'wrap up' and I'll save everything in 30 seconds."*
+
+Silent between check-ins. If you cross into Level 4, you get one full mandatory wind-down message, then the micro-loop resumes.
+
+### Multi-Terminal Awareness
+
+If you have multiple Claude Code terminals open, Pace Control aggregates time across all of them:
+
+> *"Note: You also have 2 other terminal(s) running. Combined time across all: 5h 12m."*
+
+Each terminal has its own state file. Dead terminals are cleaned up automatically.
+
+### Healthy-Stop Streak
+
+Tracks consecutive sessions where you stopped before Level 4:
+
+> *"Healthy stop streak: 5 sessions in a row."*
+
+Surfaced on session start only — never during work. If the streak breaks: *"Last session ran long. Previous best: 8 sessions. Fresh start now."* Data, not guilt.
+
 ### What Makes This Different
 
 | Property | Break Reminder Apps | Pace Control |
@@ -170,7 +194,7 @@ All state lives in `~/.claude/`. Plain text. Deletable. Yours.
 
 | File | Created | Purpose |
 |------|---------|---------|
-| `pace-control-state.json` | Automatically | Current session: start time, prompt count |
+| `pace-control-state.{PID}.json` | Automatically | Current session state (per-terminal) |
 | `pace-control-config.json` | By you (optional) | Mode, night hours, gap threshold |
 | `pace-control-history.json` | Automatically | Session log (last 30 days) for weekly patterns |
 | `pace-control-resume.md` | By wind-down | Saved context for next session |
@@ -186,7 +210,7 @@ Check your session health anytime with the `/pace-check` skill. Copy `skills/pac
 
 ## Known Limitations
 
-- **Multi-terminal:** Each Claude Code terminal is tracked independently. If you have 3 terminals open, each has its own session timer. Shared state is possible but adds complexity. Maybe v2.
+- **Multi-terminal:** Sessions are tracked per-terminal with aggregate stats surfaced when multiple terminals are active. Stale terminals are detected and cleaned up automatically.
 - **Claude Code only:** This uses Claude Code's hook system. It won't work with Cursor, Copilot, or other AI coding tools.
 - **System clock:** Thresholds use your local system time. If you travel across time zones, night mode shifts with you.
 - **Python 3 required:** Used for JSON parsing. The scripts will show a clear error message if Python 3 isn't found.
