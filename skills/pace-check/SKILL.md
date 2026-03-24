@@ -5,11 +5,11 @@ description: Check your current session health — how long you've been coding, 
 
 # Pace Check
 
-Read the session state from `~/.claude/pace-control-state.json` and provide an honest assessment.
+Read the session state and provide an honest assessment.
 
 ## What to Do
 
-1. Read `~/.claude/pace-control-state.json` to get: sessionStart, totalMinutes, promptCount
+1. Find and read the current session state file. State files are per-terminal, named `~/.claude/pace-control-state.{PID}.json`. List matching files with `ls ~/.claude/pace-control-state.*.json` and read the most recently modified one. Extract: sessionStart, totalMinutes, promptCount.
 2. Calculate current session duration
 3. Provide the assessment based on duration:
 
