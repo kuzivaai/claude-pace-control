@@ -251,6 +251,24 @@ elif [ -n "$WEEKLY_CONTEXT" ] || [ -n "$STREAK_CONTEXT" ]; then
     echo "Do not lecture. One line is enough."
     echo "</pace-control-weekly>"
   fi
+
+# --- First-run welcome (no history = brand new install) ---
+elif [ ! -f "$HISTORY_FILE" ]; then
+  echo "<pace-control-welcome>"
+  echo "Pace Control is active. It will stay silent for the first 90 minutes — that's when you're productive."
+  echo ""
+  echo "After that, it progressively surfaces session health data inside Claude's responses."
+  echo "You can check your session status anytime with /pace-check."
+  echo ""
+  if [ -n "$MULTI_TERMINAL_LINE" ]; then
+    echo "$MULTI_TERMINAL_LINE"
+    echo ""
+  fi
+  echo "INSTRUCTIONS:"
+  echo "Briefly acknowledge Pace Control is running. One sentence, then proceed with the user's request normally."
+  echo "Example: 'Pace Control is active — I'll keep an eye on session health. What are we working on?'"
+  echo "Do NOT explain how it works in detail. Just confirm it's there and move on."
+  echo "</pace-control-welcome>"
 fi
 
 # --- Reset session state for new session ---

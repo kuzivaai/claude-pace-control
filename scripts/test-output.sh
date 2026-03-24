@@ -290,6 +290,21 @@ json.dump({'sessions': sessions}, open('$HISTORY_FILE', 'w'))
 OUTPUT=$(bash "$STARTER" 2>/dev/null)
 assert_output "Session start with weekly stats" "pace-control-weekly|late-night" "$OUTPUT"
 
+# --- First-run welcome (no history file) ---
+cleanup
+setup_day_config
+rm -f "$HISTORY_FILE"
+OUTPUT=$(bash "$STARTER" 2>/dev/null)
+assert_output "First-run welcome" "pace-control-welcome" "$OUTPUT"
+assert_output "First-run — mentions /pace-check" "pace-check" "$OUTPUT"
+
+# --- Second session: no welcome (history exists) ---
+cleanup
+setup_day_config
+echo '{"sessions":[{"start":1,"end":2,"minutes":60,"prompts":10,"startHour":14}]}' > "$HISTORY_FILE"
+OUTPUT=$(bash "$STARTER" 2>/dev/null)
+assert_not_output "Second session — no welcome" "pace-control-welcome" "$OUTPUT"
+
 # --- Gap detection ---
 cleanup
 LAST=$((NOW - 2700))  # 45 minutes ago (> 1800 threshold)
