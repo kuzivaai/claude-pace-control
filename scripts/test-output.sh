@@ -91,7 +91,8 @@ setup_night_config() {
 }
 
 setup_day_config() {
-  rm -f "$CONFIG_FILE"
+  # Force daytime: nightStartHour == nightEndHour means night window is zero-length
+  echo '{"nightStartHour":0,"nightEndHour":0}' > "$CONFIG_FILE"
 }
 
 # After running the tracker, find the PID-stamped state file it created
@@ -108,12 +109,14 @@ echo ""
 
 # --- L0: Silent ---
 cleanup
+setup_day_config
 setup_state 30 5
 OUTPUT=$(bash "$TRACKER" 2>/dev/null)
 assert_empty "L0 daytime (30m)" "$OUTPUT"
 
 # --- L1: Gentle awareness ---
 cleanup
+setup_day_config
 setup_state 100 15
 OUTPUT=$(bash "$TRACKER" 2>/dev/null)
 assert_output "L1 daytime (100m)" "pace-control" "$OUTPUT"
@@ -122,6 +125,7 @@ assert_output "L1 daytime — good flow" "good flow" "$OUTPUT"
 
 # --- L2: Evidence nudge ---
 cleanup
+setup_day_config
 setup_state 150 25
 OUTPUT=$(bash "$TRACKER" 2>/dev/null)
 assert_output "L2 daytime (150m)" "pace-control" "$OUTPUT"
@@ -129,6 +133,7 @@ assert_output "L2 daytime — cognitive" "cognitive performance|error rate" "$OU
 
 # --- L3: First fire — full Safe-Save ---
 cleanup
+setup_day_config
 setup_state 200 40 false
 OUTPUT=$(bash "$TRACKER" 2>/dev/null)
 assert_output "L3 daytime first-fire" "SAFE-SAVE PROTOCOL" "$OUTPUT"
@@ -146,6 +151,7 @@ fi
 
 # --- L3: Micro-loop nudge (promptCount == nextNudgeAt) ---
 cleanup
+setup_day_config
 setup_state 200 45 true 0 45 3
 OUTPUT=$(bash "$TRACKER" 2>/dev/null)
 assert_output "L3 micro-nudge fires" "wrap up|checkpoint|future self" "$OUTPUT"
@@ -153,6 +159,7 @@ assert_not_output "L3 micro-nudge — not full Safe-Save" "SAFE-SAVE PROTOCOL" "
 
 # --- L3: Micro-loop silent (promptCount < nextNudgeAt) ---
 cleanup
+setup_day_config
 setup_state 200 43 true 0 50 3
 OUTPUT=$(bash "$TRACKER" 2>/dev/null)
 assert_empty "L3 micro-loop silent (43 < 50)" "$OUTPUT"
@@ -160,25 +167,28 @@ assert_empty "L3 micro-loop silent (43 < 50)" "$OUTPUT"
 # --- L3: Micro-loop boundary (promptCount + 1 == nextNudgeAt - 1) ---
 # Note: script increments promptCount by 1 before comparing, so 43 becomes 44 < 45
 cleanup
+setup_day_config
 setup_state 200 43 true 0 45 3
 OUTPUT=$(bash "$TRACKER" 2>/dev/null)
 assert_empty "L3 boundary silent (43+1=44 < 45)" "$OUTPUT"
 
 # --- L4: First fire ---
 cleanup
+setup_day_config
 setup_state 250 55 false
 OUTPUT=$(bash "$TRACKER" 2>/dev/null)
 assert_output "L4 daytime first-fire" "MANDATORY SAFE-SAVE" "$OUTPUT"
 
 # --- L4: First fire after L3 micro-loop (reset — windDownLevel=3 triggers reset) ---
 cleanup
+setup_day_config
 setup_state 250 60 true 3 65 3
 OUTPUT=$(bash "$TRACKER" 2>/dev/null)
 assert_output "L4 from L3 micro-loop — reset" "MANDATORY SAFE-SAVE" "$OUTPUT"
 
 # --- Firm mode: lower thresholds ---
 cleanup
-echo '{"mode":"firm"}' > "$CONFIG_FILE"
+echo '{"mode":"firm","nightStartHour":0,"nightEndHour":0}' > "$CONFIG_FILE"
 setup_state 70 12
 OUTPUT=$(bash "$TRACKER" 2>/dev/null)
 assert_output "Firm mode L1 at 70m" "pace-control" "$OUTPUT"
@@ -187,7 +197,7 @@ rm -f "$CONFIG_FILE"
 
 # --- Strict mode L4 ---
 cleanup
-echo '{"mode":"strict"}' > "$CONFIG_FILE"
+echo '{"mode":"strict","nightStartHour":0,"nightEndHour":0}' > "$CONFIG_FILE"
 setup_state 130 30 false
 OUTPUT=$(bash "$TRACKER" 2>/dev/null)
 assert_output "Strict mode L4 at 130m" "Do not respond to ANY new task" "$OUTPUT"
@@ -220,6 +230,7 @@ setup_day_config
 
 # --- L4 persistence: micro-loop continues after L4 first-fire (catches double-fire bug) ---
 cleanup
+setup_day_config
 setup_state 266 65 true 0 65 4
 OUTPUT=$(bash "$TRACKER" 2>/dev/null)
 assert_output "L4 micro-nudge after first-fire" "wrap up|checkpoint|future self" "$OUTPUT"
@@ -227,20 +238,23 @@ assert_not_output "L4 micro-nudge — not full L4" "MANDATORY SAFE-SAVE" "$OUTPU
 
 # --- L4 persistence: silent between nudges ---
 cleanup
+setup_day_config
 setup_state 266 66 true 1 72 4
 OUTPUT=$(bash "$TRACKER" 2>/dev/null)
 assert_empty "L4 micro-loop silent (66 < 72)" "$OUTPUT"
 
-# --- Missing config file: defaults to gentle ---
+# --- Missing config file: still produces output at 90m ---
+# Without config, night mode depends on system clock, so we only assert
+# that *some* pace-control output appears (L1 daytime or L2+ at night)
 cleanup
 rm -f "$CONFIG_FILE"
 setup_state 90 14
 OUTPUT=$(bash "$TRACKER" 2>/dev/null)
-assert_output "No config — L1 at 90m (gentle default)" "pace-control" "$OUTPUT"
-assert_output "No config — good flow" "good flow" "$OUTPUT"
+assert_output "No config — output at 90m" "pace-control" "$OUTPUT"
 
 # --- Corrupt state file ---
 cleanup
+setup_day_config
 echo "not json" > "$STATE_FILE"
 OUTPUT=$(bash "$TRACKER" 2>/dev/null)
 # Should not crash — script handles gracefully
@@ -248,6 +262,7 @@ assert_empty "Corrupt state — no crash (L0)" "$OUTPUT"
 
 # --- First prompt (promptCount=0) ---
 cleanup
+setup_day_config
 echo "{\"sessionStart\":${NOW},\"totalMinutes\":0,\"promptCount\":0,\"lastCheck\":${NOW}}" > "$STATE_FILE"
 OUTPUT=$(bash "$TRACKER" 2>/dev/null)
 assert_empty "First prompt (L0)" "$OUTPUT"
@@ -293,6 +308,7 @@ fi
 
 # --- Multi-terminal: aggregation shows combined time ---
 cleanup
+setup_day_config
 setup_state 150 25  # Own terminal at 150m (L2)
 # Create a peer state file with a live PID (use test script's own PID, guaranteed alive)
 echo "{\"sessionStart\":$((NOW - 7200)),\"totalMinutes\":120,\"promptCount\":20,\"lastCheck\":$((NOW - 60))}" > "$CLAUDE_DIR/pace-control-state.$$.json"
@@ -302,6 +318,7 @@ rm -f "$CLAUDE_DIR/pace-control-state.$$.json"
 
 # --- Stale detection: dead PID file is removed ---
 cleanup
+setup_day_config
 setup_state 150 25
 echo "{\"sessionStart\":$((NOW - 3600)),\"totalMinutes\":60,\"promptCount\":10,\"lastCheck\":$((NOW - 60))}" > "$CLAUDE_DIR/pace-control-state.99999999.json"
 OUTPUT=$(bash "$TRACKER" 2>/dev/null)
