@@ -250,11 +250,11 @@ elif [ "$ELAPSED_MINUTES" -lt "$THRESHOLD_L3" ]; then
   echo ""
   if [ "$IS_LATE" = true ]; then
     echo "${TIME_CONTEXT}Decisions made at this hour are more likely to need reverting tomorrow."
-    echo "Research shows cognitive performance declines ~20% after 2 hours of sustained focus"
-    echo "— and sleep deprivation compounds this significantly."
+    echo "A METR study found developers were 19% slower with AI tools but believed they were 20% faster."
+    echo "The gap between how you feel and how you're performing widens with fatigue and sleep deprivation."
   else
-    echo "Research shows cognitive performance declines ~20% after 2 hours of sustained focus."
-    echo "Your error rate and response quality are likely declining — you just can't feel it."
+    echo "A METR study found developers were 19% slower with AI tools but believed they were 20% faster."
+    echo "Your performance is likely declining in ways you can't feel — that gap widens with session length."
   fi
   echo ""
   echo "If the user seems to be wrapping up or mentions stopping, support that decision."

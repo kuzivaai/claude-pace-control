@@ -236,7 +236,8 @@ Other Claude Code tools like [claude-pulse](https://github.com/NoobyGains/claude
 
 The intervention model is grounded in real research, not vibes:
 
-- **Gloria Mark (UC Irvine)** researched attention span and cognitive degradation curves over sustained work. Recovery from interruption takes ~25 minutes.
+- **METR (2025).** A controlled study found experienced developers were [19% slower with AI tools but believed they were 20% faster](https://metr.org/blog/2025-07-10-early-2025-ai-experienced-os-dev-study/). That perception gap is exactly what Level 2's messaging targets — you can't feel the decline.
+- **Generative AI Addiction Disorder (2025).** A [ScienceDirect paper](https://www.sciencedirect.com/science/article/abs/pii/S1876201825001194) formally defines GAID as a behavioural addiction with withdrawal symptoms including anxiety when users try to reduce AI interaction. This isn't a metaphor — it's a clinical framework.
 - **Anders Ericsson** found that peak performers sustain focused work in 90-minute blocks. That's the basis for Level 0's silent period.
 - **B.F. Skinner** showed that variable ratio reinforcement schedules produce the highest, most persistent response rates. The "one more prompt" loop follows this pattern exactly.
 - **Zeigarnik Effect.** Incomplete tasks occupy working memory disproportionately. Writing down an idea (cognitive offloading) releases the hold, making it safe to stop.

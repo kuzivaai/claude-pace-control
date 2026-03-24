@@ -129,7 +129,7 @@ setup_day_config
 setup_state 150 25
 OUTPUT=$(bash "$TRACKER" 2>/dev/null)
 assert_output "L2 daytime (150m)" "pace-control" "$OUTPUT"
-assert_output "L2 daytime — cognitive" "cognitive performance|error rate" "$OUTPUT"
+assert_output "L2 daytime — evidence" "METR|slower|performance|declining" "$OUTPUT"
 
 # --- L3: First fire — full Safe-Save ---
 cleanup
