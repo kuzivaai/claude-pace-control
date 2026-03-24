@@ -15,6 +15,9 @@ export HOME="$DEMO_HOME"
 trap "rm -rf '$DEMO_HOME'" EXIT
 mkdir -p "$HOME/.claude"
 
+# Force daytime mode so demo looks correct regardless of actual time
+echo '{"nightStartHour":0,"nightEndHour":0}' > "$HOME/.claude/pace-control-config.json"
+
 NOW=$(date +%s)
 
 header() {
@@ -36,9 +39,12 @@ simulate() {
 
   header "$label"
   local start=$((NOW - elapsed * 60))
-  local state_file="$HOME/.claude/pace-control-state.$$.json"
-  echo "{\"sessionStart\":${start},\"totalMinutes\":${elapsed},\"promptCount\":${prompts},\"lastCheck\":$((NOW - 30)),\"windDownShown\":${wds},\"windDownPromptCount\":${wdpc},\"nextNudgeAt\":${nna},\"windDownLevel\":${wdl}}" > "$state_file"
+  # Write state to the OLD un-stamped filename so the tracker's migration
+  # logic picks it up (tracker will rename to pace-control-state.{PPID}.json)
+  echo "{\"sessionStart\":${start},\"totalMinutes\":${elapsed},\"promptCount\":${prompts},\"lastCheck\":$((NOW - 30)),\"windDownShown\":${wds},\"windDownPromptCount\":${wdpc},\"nextNudgeAt\":${nna},\"windDownLevel\":${wdl}}" > "$HOME/.claude/pace-control-state.json"
   OUTPUT=$(bash "$TRACKER" 2>/dev/null)
+  # Clean up PID-stamped files so next simulate() can use migration again
+  rm -f "$HOME/.claude"/pace-control-state.*.json
   if [ -n "$OUTPUT" ]; then
     echo "$OUTPUT"
   else
