@@ -1,4 +1,5 @@
 #!/bin/bash
+# Simulated progression for demo purposes
 # Pace Control — Demo Simulation
 # Rapidly simulates the full L0->L1->L2->L3->micro-nudge->L4 progression.
 # Record with: asciinema rec demo.cast
@@ -16,6 +17,7 @@ trap "rm -rf '$DEMO_HOME'" EXIT
 mkdir -p "$HOME/.claude"
 
 # Force daytime mode so demo looks correct regardless of actual time
+# nightStartHour==0 && nightEndHour==0 means no hour qualifies as "late"
 echo '{"nightStartHour":0,"nightEndHour":0}' > "$HOME/.claude/pace-control-config.json"
 
 NOW=$(date +%s)
@@ -48,7 +50,7 @@ simulate() {
   if [ -n "$OUTPUT" ]; then
     echo "$OUTPUT"
   else
-    echo "  (silent — no output)"
+    echo "  (silent — no output, working normally)"
   fi
   sleep 2
 }
@@ -64,12 +66,12 @@ bash "$STARTER" 2>/dev/null || echo "  (clean start — no previous session)"
 sleep 2
 
 simulate "Level 0: Silent (30 min)" 30 5
-simulate "Level 1: Gentle Awareness (100 min)" 100 15
+simulate "Level 1: Awareness (100 min)" 100 15
 simulate "Level 2: Evidence Nudge (150 min)" 150 25
-simulate "Level 3: Safe Wind-Down Protocol (200 min)" 200 40 false 0 0 0
+simulate "Level 3: Safe-Save Protocol (200 min)" 200 40 false 0 0 0
 simulate "Level 3: Micro-Nudge (still going...)" 210 46 true 0 46 3
 simulate "Level 3: Silent Between Nudges" 212 47 true 1 52 3
-simulate "Level 4: Mandatory Wind-Down (250 min)" 250 60 true 3 65 3
+simulate "Level 4: Full Safe-Save Protocol (250 min)" 250 60 true 3 65 3
 
 header "Done"
 echo "  That's Pace Control."

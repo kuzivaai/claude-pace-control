@@ -139,14 +139,14 @@ OUTPUT=$(bash "$TRACKER" 2>/dev/null)
 assert_output "L3 daytime first-fire" "SAFE-SAVE PROTOCOL" "$OUTPUT"
 assert_not_output "L3 daytime — not L4" "MANDATORY" "$OUTPUT"
 
-# Verify state was updated with windDownShown=true
+# Verify state was updated with windDownLevel >= 3 (windDownShown removed; derivable from windDownLevel > 0)
 ACTUAL_STATE=$(find_tracker_state)
-WDS=$(python3 -c "import json; print(json.load(open('$ACTUAL_STATE')).get('windDownShown', False))" 2>/dev/null)
-if [ "$WDS" = "True" ]; then
+WDL=$(python3 -c "import json; print(json.load(open('$ACTUAL_STATE')).get('windDownLevel', 0))" 2>/dev/null)
+if [ "$WDL" -ge 3 ] 2>/dev/null; then
   PASS=$((PASS + 1))
 else
   FAIL=$((FAIL + 1))
-  ERRORS="${ERRORS}\nFAIL: L3 first-fire — windDownShown not set to True (got: $WDS)"
+  ERRORS="${ERRORS}\nFAIL: L3 first-fire — windDownLevel not set to >= 3 (got: $WDL)"
 fi
 
 # --- L3: Micro-loop nudge (promptCount == nextNudgeAt) ---
@@ -311,14 +311,14 @@ LAST=$((NOW - 2700))  # 45 minutes ago (> 1800 threshold)
 START=$((LAST - 3600))  # Session started 1h before last check
 echo "{\"sessionStart\":${START},\"totalMinutes\":60,\"promptCount\":20,\"lastCheck\":${LAST},\"windDownShown\":true,\"windDownPromptCount\":5,\"nextNudgeAt\":25,\"windDownLevel\":3}" > "$STATE_FILE"
 OUTPUT=$(bash "$TRACKER" 2>/dev/null)
-# After gap, windDownShown should be reset
+# After gap, windDownLevel should be reset to 0 (windDownShown removed; derivable from windDownLevel > 0)
 ACTUAL_STATE=$(find_tracker_state)
-WDS=$(python3 -c "import json; print(json.load(open('$ACTUAL_STATE')).get('windDownShown', 'MISSING'))" 2>/dev/null)
-if [ "$WDS" = "False" ]; then
+WDL=$(python3 -c "import json; print(json.load(open('$ACTUAL_STATE')).get('windDownLevel', -1))" 2>/dev/null)
+if [ "$WDL" = "0" ]; then
   PASS=$((PASS + 1))
 else
   FAIL=$((FAIL + 1))
-  ERRORS="${ERRORS}\nFAIL: Gap detection — windDownShown not reset (got: $WDS)"
+  ERRORS="${ERRORS}\nFAIL: Gap detection — windDownLevel not reset (got: $WDL)"
 fi
 
 # --- Multi-terminal: aggregation shows combined time ---
