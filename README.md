@@ -18,7 +18,7 @@ I have a [command centre](https://github.com/kuzivaai/hangar) I built for myself
 
 ## How It Works
 
-Pace Control uses Claude Code's [hook system](https://docs.anthropic.com/en/docs/claude-code/hooks) to inject context into Claude's responses. No daemon, no background process, no server. Just two bash scripts and Claude's own helpfulness.
+Pace Control uses Claude Code's [hook system](https://docs.anthropic.com/en/docs/claude-code/hooks) to inject context into Claude's responses. No daemon, no background process, no server. Just a Python module, two bash wrappers, and Claude's own helpfulness.
 
 ### Progressive Intervention
 
@@ -214,6 +214,8 @@ All state lives in `~/.claude/`. Plain text. Deletable. Yours.
 
 **Save and stop:** `/wrap-up` — commits code, saves session context, captures ideas. Your next session picks up exactly where you left off.
 
+**Research details:** `/pace-info` — see the evidence behind Pace Control's interventions, with citations, sample sizes, and honest quality ratings.
+
 Copy the skill files from `skills/` to your Claude Code skills directory, or install via the plugin system.
 
 ## Why not just use a break timer?
@@ -223,7 +225,7 @@ Tools like Stretchly, DeskBreak, and Pomodoro apps remind you to take breaks. Th
 - **They're external.** A notification you dismiss in one click. Pace Control lives inside Claude's response — you can't ignore it without reading it.
 - **They're context-unaware.** Fixed intervals regardless of what you're doing. Pace Control is silent for the first 90 minutes because that's when you're productive.
 - **They don't save anything.** When a break timer goes off, you still have to manually save your work, remember where you were, and capture your ideas. Pace Control does all of that.
-- **They don't know it's 3am.** Pace Control shifts all thresholds down 40% at night and references sleep deprivation research instead of generic productivity stats.
+- **They don't know it's 3am.** Pace Control shifts all thresholds down 25-50% at night and references sleep research instead of generic productivity stats.
 
 Other Claude Code tools like [claude-pulse](https://github.com/NoobyGains/claude-pulse) and [claude_timings_wrapper](https://github.com/martinambrus/claude_timings_wrapper) track time and usage limits — but they never act on it. They show you data. Pace Control intervenes.
 

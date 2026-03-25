@@ -34,7 +34,8 @@ simulate() {
   local label="$1"
   local elapsed="$2"
   local prompts="$3"
-  local wds="${4:-false}"
+  # Parameter 4 was windDownShown (removed — derived from windDownLevel > 0)
+  local _unused="${4:-}"
   local wdpc="${5:-0}"
   local nna="${6:-0}"
   local wdl="${7:-0}"
@@ -43,7 +44,7 @@ simulate() {
   local start=$((NOW - elapsed * 60))
   # Write state to the OLD un-stamped filename so the tracker's migration
   # logic picks it up (tracker will rename to pace-control-state.{PPID}.json)
-  echo "{\"sessionStart\":${start},\"totalMinutes\":${elapsed},\"promptCount\":${prompts},\"lastCheck\":$((NOW - 30)),\"windDownShown\":${wds},\"windDownPromptCount\":${wdpc},\"nextNudgeAt\":${nna},\"windDownLevel\":${wdl}}" > "$HOME/.claude/pace-control-state.json"
+  echo "{\"sessionStart\":${start},\"totalMinutes\":${elapsed},\"promptCount\":${prompts},\"lastCheck\":$((NOW - 30)),\"windDownPromptCount\":${wdpc},\"nextNudgeAt\":${nna},\"windDownLevel\":${wdl}}" > "$HOME/.claude/pace-control-state.json"
   OUTPUT=$(bash "$TRACKER" 2>/dev/null)
   # Clean up PID-stamped files so next simulate() can use migration again
   rm -f "$HOME/.claude"/pace-control-state.*.json
