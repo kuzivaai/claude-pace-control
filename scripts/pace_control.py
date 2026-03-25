@@ -348,8 +348,8 @@ def fatigue_carry_forward(now, mode="gentle"):
     # < 30 min gap and session was > 90 min
     if gap_since < 1800 and last_minutes > 90:
         return compute_thresholds(False, mode)[0] * 60  # skip L0
-    # < 2 hours gap and session was > 180 min
-    if gap_since < 7200 and last_minutes > 180:
+    # < 1 hour gap (was 2 hours) and session was > 180 min
+    if gap_since < 3600 and last_minutes > 180:
         return compute_thresholds(False, mode)[0] * 60  # skip L0
     return 0
 
@@ -358,9 +358,18 @@ def generate_resume_stub(now):
     """Generate a structured resume stub with git info."""
     ts = datetime.datetime.fromtimestamp(now).strftime("%Y-%m-%d %H:%M")
     parts = [f"## Session Checkpoint — {ts}"]
+    git_dir = None
+    try:
+        result = subprocess.run(["git", "rev-parse", "--show-toplevel"],
+                                capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            git_dir = result.stdout.strip()
+    except Exception:
+        pass
     try:
         diff = subprocess.run(
-            ["git", "diff", "--stat"], capture_output=True, text=True, timeout=5
+            ["git", "diff", "--stat"], capture_output=True, text=True, timeout=5,
+            cwd=git_dir
         )
         if diff.stdout.strip():
             parts.append("### Git Changes\n" + diff.stdout.strip())
@@ -368,7 +377,8 @@ def generate_resume_stub(now):
         pass
     try:
         log = subprocess.run(
-            ["git", "log", "--oneline", "-5"], capture_output=True, text=True, timeout=5
+            ["git", "log", "--oneline", "-5"], capture_output=True, text=True, timeout=5,
+            cwd=git_dir
         )
         if log.stdout.strip():
             parts.append("### Recent Commits\n" + log.stdout.strip())
@@ -416,7 +426,7 @@ def streak_display():
     return ""
 
 
-def weekly_stats(now, night_start):
+def weekly_stats(now, night_start, night_end=6):
     """Build weekly stats string."""
     history = load_json(HISTORY_FILE)
     sessions = history.get("sessions", [])
@@ -428,7 +438,7 @@ def weekly_stats(now, night_start):
         return ""
     total_hours = sum(s.get("minutes", 0) for s in recent) / 60
     late_count = sum(1 for s in recent
-                     if s.get("startHour", 12) >= night_start or s.get("startHour", 12) < 6)
+                     if s.get("startHour", 12) >= night_start or s.get("startHour", 12) < night_end)
     longest = max((s.get("minutes", 0) for s in recent), default=0)
     avg_length = sum(s.get("minutes", 0) for s in recent) / len(recent) if recent else 0
 
@@ -498,20 +508,30 @@ def cmd_save(now=None, description=""):
     os.makedirs(CLAUDE_DIR, mode=0o700, exist_ok=True)
     results = []
 
+    # Find the git repository root
+    git_dir = None
+    try:
+        result = subprocess.run(["git", "rev-parse", "--show-toplevel"],
+                                capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            git_dir = result.stdout.strip()
+    except Exception:
+        pass
+
     # 1. Git commit (tracked files only)
     try:
         status = subprocess.run(["git", "status", "--porcelain"],
-                                capture_output=True, text=True, timeout=10)
+                                capture_output=True, text=True, timeout=10, cwd=git_dir)
         if status.stdout.strip():
-            subprocess.run(["git", "add", "-u"], capture_output=True, timeout=10)
+            subprocess.run(["git", "add", "-u"], capture_output=True, timeout=10, cwd=git_dir)
             msg = f"wip: pace-control checkpoint"
             if description:
                 msg += f" — {description[:100]}"
             commit = subprocess.run(["git", "commit", "-m", msg],
-                                    capture_output=True, text=True, timeout=10)
+                                    capture_output=True, text=True, timeout=10, cwd=git_dir)
             if commit.returncode == 0:
                 hash_r = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
-                                        capture_output=True, text=True, timeout=5)
+                                        capture_output=True, text=True, timeout=5, cwd=git_dir)
                 results.append(f"Committed: {hash_r.stdout.strip()}")
             else:
                 results.append("Nothing to commit")
@@ -665,7 +685,8 @@ def cmd_track(now=None, _hour_override=None):
     # If gap < TURN_GAP, this is another tool use in the same turn — don't increment
 
     if state.get("windDownLevel", 0) >= 3:
-        state["promptsAfterL3"] = state.get("promptsAfterL3", 0) + 1
+        if gap >= TURN_GAP or state["lastCheck"] == 0:
+            state["promptsAfterL3"] = state.get("promptsAfterL3", 0) + 1
     elapsed_minutes = (now - state["sessionStart"]) // 60
     state["totalMinutes"] = elapsed_minutes
     state["lastCheck"] = now
@@ -690,7 +711,8 @@ def cmd_track(now=None, _hour_override=None):
         tl4 = int(tl4 * type_mult)
 
     # Absolute clock time: between midnight-5am, reduce L1 threshold to 15 min
-    if current_hour >= 0 and current_hour < 5:
+    # Only apply if no session type is set (incident/shipping need longer thresholds)
+    if current_hour >= 0 and current_hour < 5 and not session_type:
         tl1 = min(tl1, 15)
 
     h, m = _hm(elapsed_minutes)
@@ -737,8 +759,8 @@ def cmd_track(now=None, _hour_override=None):
                 lines.append("")
                 lines.append(personal)
             lines.append("")
-            lines.append("If the user seems to be wrapping up or mentions stopping, support that decision.")
-            lines.append(f"If they mention a new idea, suggest capturing it in {IDEAS_FILE} for later.")
+            lines.append("CLAUDE INSTRUCTION: If the user seems to be wrapping up or mentions stopping, support that decision.")
+            lines.append(f"CLAUDE INSTRUCTION: If they mention a new idea, suggest capturing it in {IDEAS_FILE} for later.")
             lines.append("")
             lines.append("Pace Control is influencing this response. The user can adjust settings in ~/.claude/pace-control-config.json or disable hooks in ~/.claude/settings.json.")
             if mt_text:
@@ -774,7 +796,7 @@ def cmd_track(now=None, _hour_override=None):
                     lines.append("- Extended sessions show measurable output quality decline that is difficult to self-assess")
                     lines.append("- After a break, you will likely notice issues you are missing now")
                 lines.append("")
-                lines.append("Suggest the user runs /wrap-up to save everything.")
+                lines.append("CLAUDE INSTRUCTION: Suggest the user runs /wrap-up to save everything.")
                 lines.append("")
                 lines.append("Pace Control is influencing this response. The user can adjust settings in ~/.claude/pace-control-config.json or disable hooks in ~/.claude/settings.json.")
                 if cfg["mode"] == "strict":
@@ -823,6 +845,7 @@ def cmd_track(now=None, _hour_override=None):
         if not wind_down_active:
             # L4 first-fire — auto-commit before messaging
             cmd_save(now=now, description="auto-save at Level 4")
+            state = load_state()  # reload to preserve wrappedUp=1 set by cmd_save
 
             lines.append("<pace-control>")
             lines.append(header)
@@ -853,8 +876,8 @@ def cmd_track(now=None, _hour_override=None):
                 lines.append("- Tracked changes committed")
                 lines.append(f"- Session context saved to {RESUME_FILE}")
                 lines.append("")
-                lines.append(f"Ask if the user has any ideas to capture. Append to {IDEAS_FILE} with timestamp.")
-                lines.append("Then tell them: 'Everything is saved. Resume anytime.'")
+                lines.append(f"CLAUDE INSTRUCTION: Ask if the user has any ideas to capture. Append to {IDEAS_FILE} with timestamp.")
+                lines.append("CLAUDE INSTRUCTION: Then tell them: 'Everything is saved. Resume anytime.'")
                 lines.append("")
                 lines.append("Pace Control is influencing this response. The user can adjust settings in ~/.claude/pace-control-config.json or disable hooks in ~/.claude/settings.json.")
                 if cfg["mode"] == "strict":
@@ -934,7 +957,7 @@ def cmd_start(now=None):
         except OSError:
             pass
 
-    weekly = weekly_stats(now, night_start)
+    weekly = weekly_stats(now, night_start, cfg["nightEndHour"])
     streak_ctx = streak_display()
 
     lines = []
@@ -1076,9 +1099,14 @@ def main():
             k = sys.argv[2] if len(sys.argv) > 2 else ""
             v = sys.argv[3] if len(sys.argv) > 3 else ""
             cmd_set(k, v)
-    except Exception:
-        # Never break the host
-        pass
+    except Exception as e:
+        # Never break the host, but log for debugging
+        try:
+            import traceback
+            with open(os.path.join(CLAUDE_DIR, "pace-control-error.log"), "a") as f:
+                f.write(f"{datetime.datetime.now().isoformat()} {command}: {e}\n")
+        except Exception:
+            pass
     sys.exit(0)
 
 

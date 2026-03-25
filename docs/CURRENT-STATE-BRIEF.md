@@ -1,3 +1,5 @@
+> **Note:** This document is from pre-v0.5.0 and is outdated. The architecture has changed significantly — see README.md for current information.
+
 # Current State Brief — claude-pace-control
 
 **Generated:** 2026-03-23

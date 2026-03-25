@@ -1,7 +1,7 @@
 {
   "name": "pace-control",
   "version": "0.3.0",
-  "description": "Session health guardrails for Claude Code — the off switch nobody else will build",
+  "description": "Session awareness plugin for Claude Code — tracks session duration, saves work mechanically, resumes with full context",
   "type": "module",
   "keywords": [
     "claude-code",

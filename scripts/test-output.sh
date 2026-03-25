@@ -549,6 +549,39 @@ else
   ERRORS="${ERRORS}\nFAIL: Mechanical save — no output (got: $SAVE_OUTPUT)"
 fi
 
+# --- CLI: set command ---
+cleanup
+setup_day_config
+HOME="$TEMP_HOME" python3 "$SCRIPT_DIR/pace_control.py" set mode firm 2>/dev/null
+SET_MODE=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE')).get('mode', 'MISSING'))" 2>/dev/null)
+if [ "$SET_MODE" = "firm" ]; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1))
+  ERRORS="${ERRORS}\nFAIL: CLI set command — mode not set to firm (got: $SET_MODE)"
+fi
+
+# --- Fatigue carry-forward: recent long session shifts threshold ---
+cleanup
+setup_day_config
+# Create history with a long session that ended 20 min ago
+RECENT_END=$((NOW - 1200))
+RECENT_START=$((RECENT_END - 7200))
+python3 -c "
+import json
+history = {'sessions': [{'start': $RECENT_START, 'end': $RECENT_END, 'minutes': 120, 'prompts': 30, 'startHour': 14, 'healthyStop': True, 'maxLevel': 2}], 'streak': {'current': 1, 'best': 1, 'lastUpdated': $NOW}}
+json.dump(history, open('$HISTORY_FILE', 'w'))
+"
+# New session just started — with fatigue carry-forward from a recent 2h session,
+# the session should skip L0 and show L1 output almost immediately
+echo "{\"sessionStart\":$NOW,\"totalMinutes\":0,\"promptCount\":0,\"lastCheck\":0,\"windDownPromptCount\":0,\"nextNudgeAt\":0,\"windDownLevel\":0,\"nudgesShown\":0,\"promptsAfterL3\":0,\"wrappedUp\":0,\"focusUntil\":0,\"sessionType\":\"\"}" > "$STATE_FILE"
+OUTPUT=$(bash "$TRACKER" 2>/dev/null)
+# Fatigue carry-forward requires session > 90min AND gap < 30min (1800s).
+# Our gap is 20min (1200s) and session was 120min (>90). So carry-forward should fire.
+# L1 threshold is 90min. Carry-forward backdates by 90*60=5400s, so elapsed = 5400/60 = 90min.
+# 90min >= L1 threshold of 90 → should produce output
+assert_output "Fatigue carry-forward — L1 fires on fresh session" "pace-control" "$OUTPUT"
+
 # --- Results ---
 echo ""
 echo "=== Results ==="

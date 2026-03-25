@@ -32,8 +32,10 @@ Wait for their response. If they have ideas, append them to `~/.claude/pace-cont
 Run this command with the user's description of what they were working on:
 
 ```bash
-python3 ~/.claude/plugins/pace-control/scripts/pace_control.py save "user's description here"
+python3 <pace-control-scripts-dir>/pace_control.py save "user's description here"
 ```
+
+(The script is in the pace-control plugin's scripts/ directory. If installed via plugin, Claude Code resolves the path automatically.)
 
 This command:
 - Commits tracked changes with a descriptive message

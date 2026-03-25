@@ -9,7 +9,7 @@ Read the session state and provide an honest assessment.
 
 ## What to Do
 
-1. Find and read the current session state file. State files are per-terminal, named `~/.claude/pace-control-state.{PID}.json`. List matching files with `ls ~/.claude/pace-control-state.*.json` and read the most recently modified one. Extract: sessionStart, totalMinutes, promptCount.
+1. Read the session state file for the current terminal. The file is named `~/.claude/pace-control-state.{PID}.json` where PID is the parent process ID. You can find it by checking which PID-stamped file was most recently modified, but ideally match the current session's PID. List matching files with `ls -lt ~/.claude/pace-control-state.*.json` and read the most recently modified one. Extract: sessionStart, totalMinutes, promptCount.
 2. Calculate current session duration
 3. Provide the assessment based on duration:
 

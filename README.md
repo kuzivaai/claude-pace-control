@@ -28,7 +28,7 @@ Silent when you're productive. Escalates only when the evidence says you're decl
 |-------|-------------------|------------------------------|-----------------|
 | 0 | 0–90 min | 0–45 min | Nothing. You're in the zone. |
 | 1 | 90–120 min | 45–75 min | Mentions session length. No pressure. |
-| 2 | 2–3 hours | 75 min–2 hours | Surfaces error rate evidence. Supports stopping. |
+| 2 | 2–3 hours | 75 min–2 hours | Surfaces session duration data and research. Supports stopping. |
 | 3 | 3–4 hours | 2–3 hours | Initiates Safe-Save Protocol. Suggests committing. |
 | 4 | 4+ hours | 3+ hours | Auto-commits your code. Suggests wrapping up. |
 
@@ -52,9 +52,9 @@ If you've had 3+ late-night sessions in a week, you'll see this even during dayt
 
 The reason people don't stop isn't willpower. It's anxiety about losing progress. The Wind-Down Protocol eliminates that anxiety:
 
-1. **Commits your work.** `git status`, stage, commit with a descriptive message.
-2. **Saves session context.** What you were working on, current state, next steps, modified files, open questions.
-3. **Captures ideas.** *"Any thoughts racing? I'll save them so you won't lose them."*
+1. **Commits tracked changes.** Stages modifications to tracked files and commits. Untracked files are not included.
+2. **Saves session context.** Git diff stats, recent commits, and a description of what you were working on (provided during /wrap-up).
+3. **Captures ideas (via /wrap-up).** When you run /wrap-up, Claude asks for ideas before saving. The L4 auto-save commits code but does not prompt for ideas.
 4. **Resumes next time.** Your next Claude Code session opens with full context: *"Welcome back. Last time you were working on X, you finished Y, and the next step is Z."*
 
 ### Micro-Loop at Level 3+
