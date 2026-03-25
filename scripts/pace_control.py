@@ -162,7 +162,14 @@ def load_state():
         "sessionStart": 0, "totalMinutes": 0, "promptCount": 0,
         "lastCheck": 0, "windDownPromptCount": 0, "nextNudgeAt": 0,
         "windDownLevel": 0,
+        "nudgesShown": 0, "promptsAfterL3": 0, "wrappedUp": 0,
+        "focusUntil": 0,
+        "sessionType": "",
     }
+    INT_FIELDS = {"sessionStart", "totalMinutes", "promptCount",
+                  "lastCheck", "windDownPromptCount", "nextNudgeAt",
+                  "windDownLevel", "nudgesShown", "promptsAfterL3",
+                  "wrappedUp", "focusUntil"}
     # Migration
     if os.path.isfile(OLD_STATE_FILE):
         try:
@@ -172,13 +179,23 @@ def load_state():
     state = load_json(STATE_FILE, default_state)
     for k in default_state:
         state.setdefault(k, default_state[k])
-        state[k] = safe_int(state[k], default_state[k])
+        if k in INT_FIELDS:
+            state[k] = safe_int(state[k], default_state[k])
+    state["sessionType"] = str(state.get("sessionType", ""))
     return state
 
 
 def save_state(state):
     """Persist state atomically."""
     atomic_write_json(STATE_FILE, state)
+
+
+SESSION_TYPE_MULTIPLIERS = {
+    "incident": 1.5,
+    "shipping": 1.25,
+    "exploring": 0.85,
+    "": 1.0,
+}
 
 
 def compute_thresholds(is_late_flag, mode):
@@ -288,6 +305,10 @@ def log_completed_session(state, now):
         "start": start, "end": end, "minutes": prev_minutes,
         "prompts": prompt_count, "startHour": start_hour,
         "healthyStop": healthy,
+        "nudgesShown": state.get("nudgesShown", 0),
+        "promptsAfterL3": state.get("promptsAfterL3", 0),
+        "wrappedUp": state.get("wrappedUp", 0),
+        "maxLevel": state.get("windDownLevel", 0),
     })
 
     # Update streak
@@ -419,6 +440,13 @@ def weekly_stats(now, night_start):
         parts.append(f"Longest session: {longest // 60}h {longest % 60}m.")
     if avg_length > 120:
         parts.append(f"Average session: {avg_length:.0f}m — trending long.")
+
+    # Outcome data
+    sessions_with_l3 = [s for s in recent if s.get("maxLevel", 0) >= 3]
+    if len(sessions_with_l3) >= 3:
+        wrapped = sum(1 for s in sessions_with_l3 if s.get("wrappedUp", 0))
+        parts.append(f"{wrapped}/{len(sessions_with_l3)} sessions used /wrap-up after L3.")
+
     return " ".join(parts)
 
 
@@ -450,10 +478,110 @@ L4_NUDGES = [
 
 
 # ---------------------------------------------------------------------------
+# Outcome / mechanical commands
+# ---------------------------------------------------------------------------
+
+def cmd_wrapped(now=None):
+    """Mark current session as wrapped up."""
+    if now is None:
+        now = int(time.time())
+    os.makedirs(CLAUDE_DIR, mode=0o700, exist_ok=True)
+    state = load_state()
+    state["wrappedUp"] = 1
+    save_state(state)
+
+
+def cmd_save(now=None, description=""):
+    """Mechanical save: git commit + resume file + mark wrapped up."""
+    if now is None:
+        now = int(time.time())
+    os.makedirs(CLAUDE_DIR, mode=0o700, exist_ok=True)
+    results = []
+
+    # 1. Git commit (tracked files only)
+    try:
+        status = subprocess.run(["git", "status", "--porcelain"],
+                                capture_output=True, text=True, timeout=10)
+        if status.stdout.strip():
+            subprocess.run(["git", "add", "-u"], capture_output=True, timeout=10)
+            msg = f"wip: pace-control checkpoint"
+            if description:
+                msg += f" — {description[:100]}"
+            commit = subprocess.run(["git", "commit", "-m", msg],
+                                    capture_output=True, text=True, timeout=10)
+            if commit.returncode == 0:
+                hash_r = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
+                                        capture_output=True, text=True, timeout=5)
+                results.append(f"Committed: {hash_r.stdout.strip()}")
+            else:
+                results.append("Nothing to commit")
+        else:
+            results.append("Nothing to commit (working tree clean)")
+    except Exception:
+        results.append("Git not available or not in a repo")
+
+    # 2. Write resume file
+    stub = generate_resume_stub(now)
+    if description:
+        stub += f"\n### What We Were Working On\n{description}\n"
+    try:
+        fd, tmp = tempfile.mkstemp(dir=CLAUDE_DIR, suffix=".tmp")
+        with os.fdopen(fd, "w") as f:
+            f.write(stub)
+        os.chmod(tmp, 0o600)
+        os.rename(tmp, RESUME_FILE)
+        results.append(f"Context saved: {RESUME_FILE}")
+    except OSError:
+        results.append("Failed to save resume file")
+
+    # 3. Mark wrapped up
+    state = load_state()
+    state["wrappedUp"] = 1
+    save_state(state)
+    results.append("Session marked as wrapped up")
+
+    print("\n".join(results))
+
+
+def cmd_focus(now=None, minutes=120):
+    """Defer nudges for N minutes. Timer still runs."""
+    if now is None:
+        now = int(time.time())
+    os.makedirs(CLAUDE_DIR, mode=0o700, exist_ok=True)
+    minutes = max(min(safe_int(minutes, 120), 480), 15)
+    state = load_state()
+    state["focusUntil"] = now + (minutes * 60)
+    save_state(state)
+    h, m = format_duration(minutes)
+    if h > 0:
+        print(f"Focus mode: nudges suppressed for {h}h {m}m. Session timer still runs.")
+    else:
+        print(f"Focus mode: nudges suppressed for {m}m. Session timer still runs.")
+
+
+def cmd_type(session_type=""):
+    """Set session type for threshold adjustment."""
+    os.makedirs(CLAUDE_DIR, mode=0o700, exist_ok=True)
+    session_type = session_type.lower().strip()
+    if session_type not in SESSION_TYPE_MULTIPLIERS:
+        session_type = ""
+    state = load_state()
+    state["sessionType"] = session_type
+    save_state(state)
+    if session_type:
+        mult = SESSION_TYPE_MULTIPLIERS[session_type]
+        pct = abs(int((mult - 1) * 100))
+        direction = "extended" if mult > 1 else "shortened"
+        print(f"Session type: {session_type}. Thresholds {direction} by {pct}%.")
+    else:
+        print("Session type cleared. Default thresholds restored.")
+
+
+# ---------------------------------------------------------------------------
 # Track command (PostToolUse hook)
 # ---------------------------------------------------------------------------
 
-def cmd_track(now=None):
+def cmd_track(now=None, _hour_override=None):
     if now is None:
         now = int(time.time())
 
@@ -462,6 +590,8 @@ def cmd_track(now=None):
     cfg = load_config()
     state = load_state()
     current_hour = datetime.datetime.fromtimestamp(now).hour
+    if _hour_override is not None:
+        current_hour = _hour_override
     is_late = is_late_night(current_hour, cfg["nightStartHour"], cfg["nightEndHour"])
     timestr = time_str(now)
     messaging = cfg["messaging"]
@@ -487,6 +617,8 @@ def cmd_track(now=None):
 
     # Update state
     state["promptCount"] += 1
+    if state.get("windDownLevel", 0) >= 3:
+        state["promptsAfterL3"] = state.get("promptsAfterL3", 0) + 1
     elapsed_minutes = (now - state["sessionStart"]) // 60
     state["totalMinutes"] = elapsed_minutes
     state["lastCheck"] = now
@@ -494,8 +626,25 @@ def cmd_track(now=None):
     # Save state (first persist — before intervention logic may modify it)
     save_state(state)
 
+    # Focus mode: suppress all output until focusUntil
+    if state.get("focusUntil", 0) > now:
+        return
+
     # Thresholds
     tl1, tl2, tl3, tl4 = compute_thresholds(is_late, cfg["mode"])
+
+    # Session type multiplier
+    session_type = state.get("sessionType", "")
+    type_mult = SESSION_TYPE_MULTIPLIERS.get(session_type, 1.0)
+    if type_mult != 1.0:
+        tl1 = int(tl1 * type_mult)
+        tl2 = int(tl2 * type_mult)
+        tl3 = int(tl3 * type_mult)
+        tl4 = int(tl4 * type_mult)
+
+    # Absolute clock time: between midnight-5am, reduce L1 threshold to 15 min
+    if current_hour >= 0 and current_hour < 5:
+        tl1 = min(tl1, 15)
 
     h, m = _hm(elapsed_minutes)
     prompts = state["promptCount"]
@@ -596,6 +745,7 @@ def cmd_track(now=None):
 
             state["windDownLevel"] = 3
             state["nextNudgeAt"] = prompts + 5
+            state["nudgesShown"] = state.get("nudgesShown", 0) + 1
             save_state(state)
         else:
             # L3 micro-loop
@@ -613,6 +763,7 @@ def cmd_track(now=None):
 
                 state["windDownPromptCount"] += 1
                 state["nextNudgeAt"] = prompts + 5
+                state["nudgesShown"] = state.get("nudgesShown", 0) + 1
                 save_state(state)
             # else: silent
 
@@ -699,6 +850,7 @@ def cmd_track(now=None):
 
             state["windDownLevel"] = 4
             state["nextNudgeAt"] = prompts + 5
+            state["nudgesShown"] = state.get("nudgesShown", 0) + 1
             save_state(state)
         else:
             # L4 micro-loop
@@ -716,6 +868,7 @@ def cmd_track(now=None):
 
                 state["windDownPromptCount"] += 1
                 state["nextNudgeAt"] = prompts + 5
+                state["nudgesShown"] = state.get("nudgesShown", 0) + 1
                 save_state(state)
 
     if lines:
@@ -870,6 +1023,8 @@ def cmd_start(now=None):
         "sessionStart": now, "totalMinutes": 0, "promptCount": 0,
         "lastCheck": now, "windDownPromptCount": 0, "nextNudgeAt": 0,
         "windDownLevel": 0,
+        "nudgesShown": 0, "promptsAfterL3": 0, "wrappedUp": 0,
+        "focusUntil": 0, "sessionType": "",
     }
     save_state(new_state)
 
@@ -887,6 +1042,17 @@ def main():
             cmd_track()
         elif command == "start":
             cmd_start()
+        elif command == "wrapped":
+            cmd_wrapped()
+        elif command == "save":
+            desc = " ".join(sys.argv[2:]) if len(sys.argv) > 2 else ""
+            cmd_save(description=desc)
+        elif command == "focus":
+            mins = safe_int(sys.argv[2] if len(sys.argv) > 2 else "120", 120)
+            cmd_focus(minutes=mins)
+        elif command == "type":
+            stype = sys.argv[2] if len(sys.argv) > 2 else ""
+            cmd_type(stype)
     except Exception:
         # Never break the host
         pass

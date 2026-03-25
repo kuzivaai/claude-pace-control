@@ -477,6 +477,78 @@ OUTPUT=$(bash "$TRACKER" 2>/dev/null)
 assert_output "gapThreshold floor — still outputs at L1" "pace-control" "$OUTPUT"
 rm -f "$CONFIG_FILE"
 
+# --- Feature: Focus mode suppresses output ---
+cleanup
+setup_day_config
+FOCUS_UNTIL=$((NOW + 3600))
+echo "{\"sessionStart\":$((NOW - 6000)),\"totalMinutes\":100,\"promptCount\":15,\"lastCheck\":$((NOW - 30)),\"windDownPromptCount\":0,\"nextNudgeAt\":0,\"windDownLevel\":0,\"nudgesShown\":0,\"promptsAfterL3\":0,\"wrappedUp\":0,\"focusUntil\":${FOCUS_UNTIL},\"sessionType\":\"\"}" > "$STATE_FILE"
+OUTPUT=$(bash "$TRACKER" 2>/dev/null)
+assert_empty "Focus mode — suppresses L1 output" "$OUTPUT"
+
+# --- Feature: Focus mode expired resumes normally ---
+cleanup
+setup_day_config
+FOCUS_EXPIRED=$((NOW - 60))
+echo "{\"sessionStart\":$((NOW - 6000)),\"totalMinutes\":100,\"promptCount\":15,\"lastCheck\":$((NOW - 30)),\"windDownPromptCount\":0,\"nextNudgeAt\":0,\"windDownLevel\":0,\"nudgesShown\":0,\"promptsAfterL3\":0,\"wrappedUp\":0,\"focusUntil\":${FOCUS_EXPIRED},\"sessionType\":\"\"}" > "$STATE_FILE"
+OUTPUT=$(bash "$TRACKER" 2>/dev/null)
+assert_output "Focus expired — L1 resumes" "pace-control" "$OUTPUT"
+
+# --- Feature: Session type incident extends thresholds ---
+cleanup
+setup_day_config
+# Normal L1 at 90m. Incident (1.5x) = L1 at 135m. So 100m should be L0 (silent).
+echo "{\"sessionStart\":$((NOW - 6000)),\"totalMinutes\":100,\"promptCount\":15,\"lastCheck\":$((NOW - 30)),\"windDownPromptCount\":0,\"nextNudgeAt\":0,\"windDownLevel\":0,\"nudgesShown\":0,\"promptsAfterL3\":0,\"wrappedUp\":0,\"focusUntil\":0,\"sessionType\":\"incident\"}" > "$STATE_FILE"
+OUTPUT=$(bash "$TRACKER" 2>/dev/null)
+assert_empty "Session type incident — L0 at 100m" "$OUTPUT"
+
+# --- Feature: Session type exploring shortens thresholds ---
+cleanup
+setup_day_config
+# Normal L1 at 90m. Exploring (0.85x) = L1 at ~76m. So 80m should be L1.
+echo "{\"sessionStart\":$((NOW - 4800)),\"totalMinutes\":80,\"promptCount\":12,\"lastCheck\":$((NOW - 30)),\"windDownPromptCount\":0,\"nextNudgeAt\":0,\"windDownLevel\":0,\"nudgesShown\":0,\"promptsAfterL3\":0,\"wrappedUp\":0,\"focusUntil\":0,\"sessionType\":\"exploring\"}" > "$STATE_FILE"
+OUTPUT=$(bash "$TRACKER" 2>/dev/null)
+assert_output "Session type exploring — L1 at 80m" "pace-control" "$OUTPUT"
+
+# --- Feature: Outcome — nudgesShown increments after L3 nudge ---
+cleanup
+setup_day_config
+echo "{\"sessionStart\":$((NOW - 12000)),\"totalMinutes\":200,\"promptCount\":44,\"lastCheck\":$((NOW - 30)),\"windDownPromptCount\":0,\"nextNudgeAt\":45,\"windDownLevel\":3,\"nudgesShown\":0,\"promptsAfterL3\":0,\"wrappedUp\":0,\"focusUntil\":0,\"sessionType\":\"\"}" > "$STATE_FILE"
+OUTPUT=$(bash "$TRACKER" 2>/dev/null)
+ACTUAL_STATE=$(find_tracker_state)
+NS=$(python3 -c "import json; print(json.load(open('$ACTUAL_STATE')).get('nudgesShown', -1))" 2>/dev/null)
+if [ "$NS" -ge 1 ] 2>/dev/null; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1))
+  ERRORS="${ERRORS}\nFAIL: Outcome — nudgesShown not incremented (got: $NS)"
+fi
+
+# --- Feature: Outcome — promptsAfterL3 increments ---
+cleanup
+setup_day_config
+echo "{\"sessionStart\":$((NOW - 12000)),\"totalMinutes\":200,\"promptCount\":50,\"lastCheck\":$((NOW - 30)),\"windDownPromptCount\":2,\"nextNudgeAt\":60,\"windDownLevel\":3,\"nudgesShown\":2,\"promptsAfterL3\":5,\"wrappedUp\":0,\"focusUntil\":0,\"sessionType\":\"\"}" > "$STATE_FILE"
+OUTPUT=$(bash "$TRACKER" 2>/dev/null)
+ACTUAL_STATE=$(find_tracker_state)
+PA=$(python3 -c "import json; print(json.load(open('$ACTUAL_STATE')).get('promptsAfterL3', -1))" 2>/dev/null)
+if [ "$PA" -ge 6 ] 2>/dev/null; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1))
+  ERRORS="${ERRORS}\nFAIL: Outcome — promptsAfterL3 not incremented (got: $PA)"
+fi
+
+# --- Feature: Mechanical save produces output ---
+cleanup
+setup_day_config
+setup_state 200 40 false
+SAVE_OUTPUT=$(HOME="$TEMP_HOME" python3 "$SCRIPT_DIR/pace_control.py" save "testing save" 2>/dev/null)
+if echo "$SAVE_OUTPUT" | grep -qiE "commit|Context saved|working tree"; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1))
+  ERRORS="${ERRORS}\nFAIL: Mechanical save — no output (got: $SAVE_OUTPUT)"
+fi
+
 # --- Results ---
 echo ""
 echo "=== Results ==="

@@ -2,7 +2,7 @@
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**The off-switch for Claude Code.**
+**Session awareness for Claude Code.**
 
 ---
 
@@ -18,7 +18,7 @@ I have a [command centre](https://github.com/kuzivaai/hangar) I built for myself
 
 ## How It Works
 
-Pace Control uses Claude Code's [hook system](https://docs.anthropic.com/en/docs/claude-code/hooks) to inject context into Claude's responses. No daemon, no background process, no server. Just a Python module, two bash wrappers, and Claude's own helpfulness.
+Pace Control tracks your Claude Code session and surfaces time-awareness inside Claude's responses. When you stop, it saves your work mechanically — git commit, context file, ideas — so the next session picks up where you left off. A Python module with two bash wrappers, no server, no telemetry.
 
 ### Progressive Intervention
 
@@ -86,7 +86,7 @@ Surfaced on session start only — never during work. If the streak breaks: *"La
 | Property | Break Reminder Apps | Pace Control |
 |----------|-------------------|--------------|
 | **Location** | External notification | Inside your terminal |
-| **Dismissal** | One click to ignore | Woven into Claude's response |
+| **Dismissal** | One click to ignore | In Claude's response (you can still say "keep going") |
 | **Evidence** | "Time's up" | Research-backed session data |
 | **On stop** | Nothing happens | Commits code, saves context, captures ideas |
 | **Resume** | None | Full context injection next session |
@@ -94,7 +94,7 @@ Surfaced on session start only — never during work. If the streak breaks: *"La
 | **First 90 min** | May interrupt flow | Completely silent |
 | **Escalation** | Typically same intensity | 5 levels, progressive |
 
-**Key insight:** The barrier to stopping isn't willpower. It's anxiety about losing progress. Remove the anxiety, and people stop naturally.
+**Key insight:** The barrier to stopping is often anxiety about losing progress. The mechanical save — git commit, context file, ideas — removes that barrier. Whether that actually changes behaviour is something we're measuring.
 
 ## Install
 
@@ -195,6 +195,44 @@ Create `~/.claude/pace-control-config.json` to customise. Optional, the defaults
 - **Full** is the default. Evidence-based nudges, session data, and the Safe-Save protocol at L3+.
 - **Awareness** shows session duration and brief evidence. No inline safe-save protocol — just suggests `/wrap-up`.
 - **Tracking** shows only a timer line. No evidence, no protocol. For users who want the data without any nudging.
+
+### Focus Mode
+
+Suppress nudges when you're in genuine productive flow:
+
+```
+python3 ~/.claude/plugins/pace-control/scripts/pace_control.py focus 120
+```
+
+Nudges suppressed for 2 hours. Session timer still runs. When focus expires, normal escalation resumes. Range: 15 minutes to 8 hours.
+
+### Session Types
+
+Different work gets different thresholds:
+
+```
+python3 ~/.claude/plugins/pace-control/scripts/pace_control.py type incident
+```
+
+| Type | Threshold Change | Use When |
+|------|-----------------|----------|
+| `incident` | +50% (longer before nudges) | Production outage, urgent fix |
+| `shipping` | +25% | Deadline crunch, final push |
+| `exploring` | -15% (earlier nudges) | Side project, learning |
+| (empty) | Default | Normal work |
+
+### Outcome Tracking
+
+Pace Control tracks whether its own nudges work:
+- How many L3+ nudges were shown per session
+- How many prompts happened after the first L3 nudge
+- Whether the session ended with `/wrap-up`
+
+This data surfaces in your weekly stats and helps determine whether the tool is actually useful.
+
+### Mechanical Save
+
+When you run `/wrap-up`, the Python module handles the git commit and resume file directly — not through Claude following instructions. This means saves are reliable regardless of Claude's compliance.
 
 ## Files
 
