@@ -1,6 +1,6 @@
 ---
 name: pace-check
-description: Check your current session health — how long you've been coding, your pace, and whether it's time to stop. Also use to safely wind down a session, saving all work and context for seamless resume.
+description: Check your current session health — how long you've been coding, your pace, and whether it might be time to take a break. Use /wrap-up to save and stop.
 ---
 
 # Pace Check

@@ -16,6 +16,7 @@ import os
 import re
 import subprocess
 import sys
+import shlex
 import tempfile
 import time
 
@@ -306,7 +307,7 @@ def log_completed_session(state, now):
     atomic_write_json(HISTORY_FILE, history)
 
 
-def fatigue_carry_forward(now):
+def fatigue_carry_forward(now, mode="gentle"):
     """Check if fatigue from a recent session should carry forward.
     Returns number of seconds to subtract from session start time, or 0."""
     history = load_json(HISTORY_FILE)
@@ -323,10 +324,10 @@ def fatigue_carry_forward(now):
         return 0
     # < 30 min gap and session was > 90 min
     if gap_since < 1800 and last_minutes > 90:
-        return compute_thresholds(False, "gentle")[0] * 60  # skip L0
+        return compute_thresholds(False, mode)[0] * 60  # skip L0
     # < 2 hours gap and session was > 180 min
     if gap_since < 7200 and last_minutes > 180:
-        return compute_thresholds(False, "gentle")[0] * 60  # skip L0
+        return compute_thresholds(False, mode)[0] * 60  # skip L0
     return 0
 
 
@@ -473,7 +474,7 @@ def cmd_track(now=None):
             log_completed_session(state, now)
 
         # Fatigue carry-forward
-        fatigue_offset = fatigue_carry_forward(now)
+        fatigue_offset = fatigue_carry_forward(now, cfg["mode"])
         new_start = now - fatigue_offset
 
         state["sessionStart"] = new_start
@@ -794,7 +795,7 @@ def cmd_start(now=None):
         lines.append("3. Ask: 'Want to pick up where we left off, start with one of your saved ideas, or work on something new?'")
         lines.append("4. Once they decide, proceed normally")
         lines.append("5. After the user has acknowledged, clear the resume and ideas files by running:")
-        lines.append(f"   rm -f '{RESUME_FILE}' && : > '{IDEAS_FILE}'")
+        lines.append(f"   rm -f {shlex.quote(RESUME_FILE)} && : > {shlex.quote(IDEAS_FILE)}")
         lines.append("   (Do this silently after the user has chosen what to work on, not before)")
         lines.append("</pace-control-resume>")
 

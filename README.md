@@ -37,7 +37,7 @@ Silent when you're productive. Escalates only when the evidence says you're decl
 A 2-hour session at 2pm and a 2-hour session at 2am have measurably different outcomes. Pace Control adjusts accordingly.
 
 - **Pre-session friction:** Start Claude Code after 11pm and it gently surfaces the time before responding. *"It's 11:47pm. Quick fix or exploration?"* One mention, not a lecture.
-- **Faster escalation:** All thresholds shift down ~40% at night. Level 4 messaging references sleep research and cites evidence directly.
+- **Faster escalation:** All thresholds shift down 25-50% at night. Level 4 messaging references sleep research and cites evidence directly.
 - **Sleep-specific framing:** Night-time nudges reference sleep deprivation research instead of generic productivity stats.
 
 ### Weekly Pattern Detection
@@ -92,7 +92,7 @@ Surfaced on session start only — never during work. If the streak breaks: *"La
 | **Resume** | None | Full context injection next session |
 | **Autonomy** | Timer-based alerts | Shows evidence, respects choice |
 | **First 90 min** | May interrupt flow | Completely silent |
-| **Escalation** | Same intensity always | 5 levels, progressive |
+| **Escalation** | Typically same intensity | 5 levels, progressive |
 
 **Key insight:** The barrier to stopping isn't willpower. It's anxiety about losing progress. Remove the anxiety, and people stop naturally.
 
@@ -160,7 +160,7 @@ Start a Claude Code session. You should see **no output**. Level 0 is silent for
 
 ### Alternative: Just grab the scripts
 
-The whole thing is two bash scripts. Copy `scripts/session-start.sh` and `scripts/session-tracker.sh` anywhere, make them executable, and point your hooks at them.
+The whole thing is a Python module with two bash wrappers. Copy the `scripts/` directory anywhere, make the `.sh` files executable, and point your hooks at them. Requires Python 3.
 
 ## Configuration
 
@@ -169,6 +169,7 @@ Create `~/.claude/pace-control-config.json` to customise. Optional, the defaults
 ```json
 {
   "mode": "gentle",
+  "messaging": "full",
   "nightStartHour": 23,
   "nightEndHour": 6,
   "gapThreshold": 1800
@@ -178,6 +179,7 @@ Create `~/.claude/pace-control-config.json` to customise. Optional, the defaults
 | Option | Values | Default | What it does |
 |--------|--------|---------|-------------|
 | `mode` | `gentle` / `firm` / `strict` | `gentle` | How aggressively thresholds are applied |
+| `messaging` | `full` / `awareness` / `tracking` | `full` | How verbose the interventions are |
 | `nightStartHour` | 0–23 | 23 | When late-night mode activates |
 | `nightEndHour` | 0–23 | 6 | When late-night mode deactivates |
 | `gapThreshold` | seconds | 1800 | Inactivity gap that starts a new session |
@@ -186,7 +188,13 @@ Create `~/.claude/pace-control-config.json` to customise. Optional, the defaults
 
 - **Gentle** is the default. Evidence and suggestions, full autonomy. For most people.
 - **Firm** reduces thresholds by 25% with stronger language. Still respects your choice.
-- **Strict** halves all thresholds. At Level 4, Claude refuses new tasks and only completes current work + Safe-Save. For people who've asked to be held accountable.
+- **Strict** halves all thresholds. At Level 4, Claude suggests saving instead of starting new tasks (say "override" to continue). For people who've asked to be held accountable.
+
+### Messaging Verbosity
+
+- **Full** is the default. Evidence-based nudges, session data, and the Safe-Save protocol at L3+.
+- **Awareness** shows session duration and brief evidence. No inline safe-save protocol — just suggests `/wrap-up`.
+- **Tracking** shows only a timer line. No evidence, no protocol. For users who want the data without any nudging.
 
 ## Files
 
