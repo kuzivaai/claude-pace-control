@@ -2,7 +2,7 @@
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**The off-switch for Claude Code that Anthropic won't build.**
+**The off-switch for Claude Code.**
 
 ---
 
@@ -12,7 +12,7 @@ Since I started using Claude Code, I've struggled to sleep. I'm either coding or
 
 I started seeing it everywhere. The [Reddit threads](https://www.reddit.com/r/ClaudeAI/comments/1kwrmfn/claude_code_is_like_going_from_weed_to_crack/). The Instagram posts. People describing the same loop: "just one more prompt," then it's 3am and you're refactoring code that was fine to begin with. I thought I had a problem. I do. But it's validating that it's not just me.
 
-Tinfoil hat moment: I think Anthropic is doing something weird. But regardless, I need to sleep better. I simply need to do better.
+Regardless, I need to sleep better. I simply need to do better.
 
 I have a [command centre](https://github.com/kuzivaai/hangar) I built for myself called Hangar that tracks my (embarrassingly) five projects, including Hangar itself. And I thought, okay, let me see if I can help myself by locking myself out of Claude. That's why I built this.
 
@@ -24,20 +24,20 @@ Pace Control uses Claude Code's [hook system](https://docs.anthropic.com/en/docs
 
 Silent when you're productive. Escalates only when the evidence says you're declining.
 
-| Level | Daytime Threshold | Night Threshold (after 11pm) | What Claude Does |
+| Level | Daytime Threshold | Night Threshold (after 11pm) | What Claude Is Asked To Do |
 |-------|-------------------|------------------------------|-----------------|
 | 0 | 0–90 min | 0–45 min | Nothing. You're in the zone. |
 | 1 | 90–120 min | 45–75 min | Mentions session length. No pressure. |
 | 2 | 2–3 hours | 75 min–2 hours | Surfaces error rate evidence. Supports stopping. |
 | 3 | 3–4 hours | 2–3 hours | Initiates Safe-Save Protocol. Suggests committing. |
-| 4 | 4+ hours | 3+ hours | Mandatory wind-down. Commits, saves context, captures ideas. |
+| 4 | 4+ hours | 3+ hours | Automatic wind-down. Commits, saves context, captures ideas. |
 
 ### Late-Night Awareness
 
-A 2-hour session at 2pm is productive. A 2-hour session at 2am is pathological. Pace Control knows the difference.
+A 2-hour session at 2pm and a 2-hour session at 2am have measurably different outcomes. Pace Control adjusts accordingly.
 
 - **Pre-session friction:** Start Claude Code after 11pm and it gently surfaces the time before responding. *"It's 11:47pm. Quick fix or exploration?"* One mention, not a lecture.
-- **Faster escalation:** All thresholds shift down ~40% at night. Level 4 messaging is blunt. *"It's 2:17am. Go to bed."*
+- **Faster escalation:** All thresholds shift down ~40% at night. Level 4 messaging references sleep research and cites evidence directly.
 - **Sleep-specific framing:** Night-time nudges reference sleep deprivation research instead of generic productivity stats.
 
 ### Weekly Pattern Detection
@@ -59,11 +59,11 @@ The reason people don't stop isn't willpower. It's anxiety about losing progress
 
 ### Micro-Loop at Level 3+
 
-After the first Safe-Save message, Pace Control doesn't keep repeating the same wall of text. It switches to short, variable-interval check-ins every 3-7 prompts:
+After the first Safe-Save message, Pace Control doesn't keep repeating the same wall of text. It switches to short check-ins every 5 prompts:
 
-> *"SESSION: 3h 25m | 52 prompts — Still here. When you finish what you're working on, say 'wrap up' and I'll save everything in 30 seconds."*
+> *"SESSION: 3h 25m | 52 prompts — Still here. When you finish what you're working on, say 'wrap up' and I'll save everything."*
 
-Silent between check-ins. If you cross into Level 4, you get one full mandatory wind-down message, then the micro-loop resumes.
+Silent between check-ins. If you cross into Level 4, you get one full automatic wind-down message, then the micro-loop resumes with more direct messaging.
 
 ### Multi-Terminal Awareness
 
@@ -86,11 +86,11 @@ Surfaced on session start only — never during work. If the streak breaks: *"La
 | Property | Break Reminder Apps | Pace Control |
 |----------|-------------------|--------------|
 | **Location** | External notification | Inside your terminal |
-| **Dismissal** | One click to ignore | Part of Claude's response |
-| **Evidence** | "Time's up" | "Your error rate is increasing" |
+| **Dismissal** | One click to ignore | Woven into Claude's response |
+| **Evidence** | "Time's up" | Research-backed session data |
 | **On stop** | Nothing happens | Commits code, saves context, captures ideas |
 | **Resume** | None | Full context injection next session |
-| **Autonomy** | Nags or blocks | Shows evidence, respects choice |
+| **Autonomy** | Timer-based alerts | Shows evidence, respects choice |
 | **First 90 min** | May interrupt flow | Completely silent |
 | **Escalation** | Same intensity always | 5 levels, progressive |
 
@@ -200,20 +200,20 @@ All state lives in `~/.claude/`. Plain text. Deletable. Yours.
 | `pace-control-resume.md` | By wind-down | Saved context for next session |
 | `pace-control-ideas.md` | By wind-down | Captured ideas |
 
-## Manual Check
+## Skills
 
-Check your session health anytime with the `/pace-check` skill. Copy `skills/pace-check/SKILL.md` to your Claude Code skills directory.
+**Check session health:** `/pace-check` — see your current session duration, prompt count, and an evidence-based assessment.
 
-```
-/pace-check
-```
+**Save and stop:** `/wrap-up` — commits code, saves session context, captures ideas. Your next session picks up exactly where you left off.
+
+Copy the skill files from `skills/` to your Claude Code skills directory, or install via the plugin system.
 
 ## Why not just use a break timer?
 
 Tools like Stretchly, DeskBreak, and Pomodoro apps remind you to take breaks. They work for general computer use. They don't work for AI-assisted coding because:
 
 - **They're external.** A notification you dismiss in one click. Pace Control lives inside Claude's response — you can't ignore it without reading it.
-- **They're dumb.** Fixed intervals regardless of what you're doing. Pace Control is silent for the first 90 minutes because that's when you're productive.
+- **They're context-unaware.** Fixed intervals regardless of what you're doing. Pace Control is silent for the first 90 minutes because that's when you're productive.
 - **They don't save anything.** When a break timer goes off, you still have to manually save your work, remember where you were, and capture your ideas. Pace Control does all of that.
 - **They don't know it's 3am.** Pace Control shifts all thresholds down 40% at night and references sleep deprivation research instead of generic productivity stats.
 
@@ -226,6 +226,10 @@ Other Claude Code tools like [claude-pulse](https://github.com/NoobyGains/claude
 - **Python 3 required:** Used for JSON parsing. The scripts will show a clear error message if Python 3 isn't found.
 - **No cross-machine sync:** State files are local to your machine.
 
+## Data Practices
+
+Pace Control runs entirely on your machine. No data is sent anywhere. All state files are stored in `~/.claude/` as plain JSON and markdown. There is no server, no analytics, no telemetry. You can delete all data at any time with `rm ~/.claude/pace-control-*`.
+
 ## Uninstalling
 
 1. Remove the `SessionStart` and `PostToolUse` entries from `~/.claude/settings.json`
@@ -236,11 +240,11 @@ Other Claude Code tools like [claude-pulse](https://github.com/NoobyGains/claude
 
 The intervention model is grounded in real research, not vibes:
 
-- **METR (2025).** A controlled study found experienced developers were [19% slower with AI tools but believed they were 20% faster](https://metr.org/blog/2025-07-10-early-2025-ai-experienced-os-dev-study/). That perception gap is exactly what Level 2's messaging targets — you can't feel the decline.
-- **Generative AI Addiction Disorder (2025).** A [ScienceDirect paper](https://www.sciencedirect.com/science/article/abs/pii/S1876201825001194) formally defines GAID as a behavioural addiction with withdrawal symptoms including anxiety when users try to reduce AI interaction. This isn't a metaphor — it's a clinical framework.
-- **Anders Ericsson** found that peak performers sustain focused work in 90-minute blocks. That's the basis for Level 0's silent period.
-- **B.F. Skinner** showed that variable ratio reinforcement schedules produce the highest, most persistent response rates. The "one more prompt" loop follows this pattern exactly.
-- **Zeigarnik Effect.** Incomplete tasks occupy working memory disproportionately. Writing down an idea (cognitive offloading) releases the hold, making it safe to stop.
+- **METR (2025).** A controlled study found experienced developers were [19% slower with AI tools but believed they were 20% faster](https://metr.org/blog/2025-07-10-early-2025-ai-experienced-os-dev-study/). That perception gap is what Level 2's messaging addresses — the decline is difficult to self-assess.
+- **Generative AI Addiction Disorder (2025).** A [ScienceDirect paper](https://www.sciencedirect.com/science/article/abs/pii/S1876201825001194) proposes GAID as a behavioural framework describing compulsive AI interaction patterns. This is a proposed research framework, not a validated clinical diagnosis — but the pattern it describes (difficulty disengaging from AI coding sessions) maps to behaviours many developers report.
+- **Anders Ericsson** observed that elite performers tend to practise in 60-90 minute sessions (Ericsson et al., 1993). This is an observational finding, not an experimentally validated optimum, but it informs Level 0's silent period as a reasonable heuristic.
+- **B.F. Skinner** established that variable reinforcement schedules produce persistent response rates in classic demonstrations. The "one more prompt" loop has structural similarities to this pattern, though the specific application to AI coding has not been empirically studied.
+- **Cognitive offloading.** Formulating specific plans for incomplete tasks reduces their cognitive interference (Masicampo & Baumeister, 2011). The Safe-Save Protocol is designed around this finding — saving context with specific next steps releases the hold that unfinished work exerts.
 - **Thaler & Sunstein (Nudge theory).** Modifying the choice environment is more effective than relying on willpower. Pace Control modifies Claude's responses rather than asking you to self-regulate.
 
 ## Contributing

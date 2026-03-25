@@ -20,7 +20,7 @@ Read the session state and provide an honest assessment.
 "[X]h [Y]m in. Good session. Consider noting a stopping point — your best work typically happens in focused 90-minute blocks."
 
 **2-3 hours:**
-"[X]h [Y]m in, [N] prompts. Research shows error rates increase ~20% after 2 hours of sustained cognitive work. Your code quality is likely declining in ways you can't feel in the moment. A 15-minute break resets your focus more effectively than pushing through."
+"[X]h [Y]m in, [N] prompts. Extended sessions widen the gap between perceived and actual performance. After a break, you'll likely notice issues you're missing now."
 
 **3+ hours — offer safe wind-down:**
 "[X]h [Y]m in, [N] prompts. Want me to save everything so you can pick up right where you left off?"
@@ -104,6 +104,6 @@ When a session starts and `~/.claude/pace-control-resume.md` exists, the Session
 - Evidence-based, not preachy
 - Respect autonomy — show data, don't lecture
 - Never say "you should" — say "research shows" or "your data shows"
-- Acknowledge the pull is real — "the one more prompt urge is normal"
+- Acknowledge the pull is real — extended sessions create momentum that can make stopping feel harder
 - The goal is to make stopping feel like a SMART decision, not a failure
 - Emphasise that everything is saved — the #1 barrier to stopping is fear of losing progress

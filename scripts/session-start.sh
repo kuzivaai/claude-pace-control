@@ -14,7 +14,11 @@ fi
 
 # --- Ensure ~/.claude/ directory exists ---
 CLAUDE_DIR="${HOME}/.claude"
+umask 077
 mkdir -p "$CLAUDE_DIR"
+chmod 700 "$CLAUDE_DIR" 2>/dev/null
+chmod 600 "$CLAUDE_DIR"/pace-control-*.json 2>/dev/null
+chmod 600 "$CLAUDE_DIR"/pace-control-*.md 2>/dev/null
 
 STATE_FILE="${CLAUDE_DIR}/pace-control-state.${PPID}.json"
 OLD_STATE_FILE="${CLAUDE_DIR}/pace-control-state.json"
@@ -29,7 +33,7 @@ RESUME_FILE="${CLAUDE_DIR}/pace-control-resume.md"
 HISTORY_FILE="${CLAUDE_DIR}/pace-control-history.json"
 
 NOW=$(date +%s)
-CURRENT_HOUR=$(date +%-H)
+CURRENT_HOUR=$(date +%H | sed 's/^0//')
 HAS_RESUME=false
 HAS_IDEAS=false
 
@@ -59,6 +63,15 @@ else
   fi
 fi
 
+# --- Escape XML-like content and truncate to prevent prompt injection ---
+safe_cat() {
+  local file="$1"
+  local max_chars="${2:-2000}"
+  if [ -f "$file" ] && [ -s "$file" ]; then
+    head -c "$max_chars" "$file" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'
+  fi
+}
+
 # --- Aggregate across terminals ---
 OTHER_TERMINALS=0
 AGGREGATE_MINUTES=0
@@ -67,14 +80,16 @@ for PEER_STATE in "$CLAUDE_DIR"/pace-control-state.*.json; do
   [ "$PEER_STATE" = "$STATE_FILE" ] && continue
   PEER_PID=$(echo "$PEER_STATE" | grep -oE '[0-9]+\.json$' | grep -oE '^[0-9]+')
   if ! kill -0 "$PEER_PID" 2>/dev/null; then
-    rm -f "$PEER_STATE"
+    [ -L "$PEER_STATE" ] || rm -f "$PEER_STATE"
     continue
   fi
   PEER_LAST=$(python3 -c "import json; print(json.load(open('$PEER_STATE')).get('lastCheck',0))" 2>/dev/null || echo 0)
+  [[ "$PEER_LAST" =~ ^[0-9]+$ ]] || PEER_LAST=0
   if [ $((NOW - PEER_LAST)) -gt "$GAP_THRESHOLD" ]; then
     continue
   fi
   PEER_MINUTES=$(python3 -c "import json; print(json.load(open('$PEER_STATE')).get('totalMinutes',0))" 2>/dev/null || echo 0)
+  [[ "$PEER_MINUTES" =~ ^[0-9]+$ ]] || PEER_MINUTES=0
   OTHER_TERMINALS=$((OTHER_TERMINALS + 1))
   AGGREGATE_MINUTES=$((AGGREGATE_MINUTES + PEER_MINUTES))
 done
@@ -176,7 +191,7 @@ if [ "$HAS_RESUME" = true ] || [ "$HAS_IDEAS" = true ]; then
 
   if [ "$HAS_RESUME" = true ]; then
     echo "=== SESSION RESUME ==="
-    cat "$RESUME_FILE"
+    safe_cat "$RESUME_FILE"
     echo ""
     echo "=== END RESUME ==="
     echo ""
@@ -184,7 +199,7 @@ if [ "$HAS_RESUME" = true ] || [ "$HAS_IDEAS" = true ]; then
 
   if [ "$HAS_IDEAS" = true ]; then
     echo "=== SAVED IDEAS ==="
-    cat "$IDEAS_FILE"
+    safe_cat "$IDEAS_FILE"
     echo ""
     echo "=== END IDEAS ==="
     echo ""
@@ -202,9 +217,9 @@ if [ "$HAS_RESUME" = true ] || [ "$HAS_IDEAS" = true ]; then
 
 # --- Late-night pre-session friction (only when no resume) ---
 elif [ "$IS_LATE" = true ]; then
-  TIMESTR=$(date '+%-I:%M%p' | tr '[:upper:]' '[:lower:]')
+  TIMESTR=$(date '+%I:%M%p' | sed 's/^0//' | tr '[:upper:]' '[:lower:]')
   echo "<pace-control-late-start>"
-  echo "It's ${TIMESTR}. Starting a new session now often leads to 3am finishes."
+  echo "It's ${TIMESTR}. Late start noted."
   echo ""
   if [ -n "$WEEKLY_CONTEXT" ]; then
     echo "WEEKLY: ${WEEKLY_CONTEXT}"
@@ -255,10 +270,9 @@ elif [ -n "$WEEKLY_CONTEXT" ] || [ -n "$STREAK_CONTEXT" ]; then
 # --- First-run welcome (no history = brand new install) ---
 elif [ ! -f "$HISTORY_FILE" ]; then
   echo "<pace-control-welcome>"
-  echo "Pace Control is active. It will stay silent for the first 90 minutes — that's when you're productive."
+  echo "Pace Control is active. It stays silent while you're productive."
   echo ""
-  echo "After that, it progressively surfaces session health data inside Claude's responses."
-  echo "You can check your session status anytime with /pace-check."
+  echo "Try /pace-check anytime to see your session status, or /wrap-up to save everything and stop."
   echo ""
   if [ -n "$MULTI_TERMINAL_LINE" ]; then
     echo "$MULTI_TERMINAL_LINE"

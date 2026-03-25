@@ -121,7 +121,7 @@ setup_state 100 15
 OUTPUT=$(bash "$TRACKER" 2>/dev/null)
 assert_output "L1 daytime (100m)" "pace-control" "$OUTPUT"
 assert_output "L1 daytime — session duration" "[0-9]+h [0-9]+m" "$OUTPUT"
-assert_output "L1 daytime — good flow" "good flow" "$OUTPUT"
+assert_output "L1 daytime — all good" "all good" "$OUTPUT"
 
 # --- L2: Evidence nudge ---
 cleanup
@@ -177,14 +177,14 @@ cleanup
 setup_day_config
 setup_state 250 55 false
 OUTPUT=$(bash "$TRACKER" 2>/dev/null)
-assert_output "L4 daytime first-fire" "MANDATORY SAFE-SAVE" "$OUTPUT"
+assert_output "L4 daytime first-fire" "SAFE-SAVE PROTOCOL" "$OUTPUT"
 
 # --- L4: First fire after L3 micro-loop (reset — windDownLevel=3 triggers reset) ---
 cleanup
 setup_day_config
 setup_state 250 60 true 3 65 3
 OUTPUT=$(bash "$TRACKER" 2>/dev/null)
-assert_output "L4 from L3 micro-loop — reset" "MANDATORY SAFE-SAVE" "$OUTPUT"
+assert_output "L4 from L3 micro-loop — reset" "SAFE-SAVE PROTOCOL" "$OUTPUT"
 
 # --- Firm mode: lower thresholds ---
 cleanup
@@ -192,7 +192,7 @@ echo '{"mode":"firm","nightStartHour":0,"nightEndHour":0}' > "$CONFIG_FILE"
 setup_state 70 12
 OUTPUT=$(bash "$TRACKER" 2>/dev/null)
 assert_output "Firm mode L1 at 70m" "pace-control" "$OUTPUT"
-assert_output "Firm mode L1 — good flow" "good flow" "$OUTPUT"
+assert_output "Firm mode L1 — all good" "all good" "$OUTPUT"
 rm -f "$CONFIG_FILE"
 
 # --- Strict mode L4 ---
@@ -200,7 +200,7 @@ cleanup
 echo '{"mode":"strict","nightStartHour":0,"nightEndHour":0}' > "$CONFIG_FILE"
 setup_state 130 30 false
 OUTPUT=$(bash "$TRACKER" 2>/dev/null)
-assert_output "Strict mode L4 at 130m" "Do not respond to ANY new task" "$OUTPUT"
+assert_output "Strict mode L4 at 130m" "Strict mode is active|Do not start new tasks" "$OUTPUT"
 rm -f "$CONFIG_FILE"
 
 # --- Night mode: L0 silent ---
@@ -217,7 +217,7 @@ setup_night_config
 setup_state 50 8
 OUTPUT=$(bash "$TRACKER" 2>/dev/null)
 assert_output "L1 night (50m)" "pace-control" "$OUTPUT"
-assert_output "L1 night — clock mention" "eye on the clock|keep an eye" "$OUTPUT"
+assert_output "L1 night — all good" "all good|stopping point" "$OUTPUT"
 setup_day_config
 
 # --- Night mode: L2 with sleep reference ---
@@ -225,7 +225,7 @@ cleanup
 setup_night_config
 setup_state 80 15
 OUTPUT=$(bash "$TRACKER" 2>/dev/null)
-assert_output "L2 night (80m)" "sleep deprivation|sleep" "$OUTPUT"
+assert_output "L2 night (80m)" "late-night sessions|perceived and actual" "$OUTPUT"
 setup_day_config
 
 # --- L4 persistence: micro-loop continues after L4 first-fire (catches double-fire bug) ---
@@ -385,6 +385,59 @@ else
   FAIL=$((FAIL + 1))
   ERRORS="${ERRORS}\nFAIL: Streak — unhealthy stop should reset to 0, best at 5 (got: current=$STREAK_CURRENT, best=$STREAK_BEST)"
 fi
+
+# --- New assertions: evidence-validated improvements ---
+
+# No unsupported claims in L3
+cleanup
+setup_day_config
+setup_state 200 40 false
+OUTPUT=$(bash "$TRACKER" 2>/dev/null)
+assert_not_output "L3 daytime — no 2-3x claim" "2-3x" "$OUTPUT"
+assert_not_output "L3 daytime — no slot machine" "slot machine" "$OUTPUT"
+assert_output "L3 — transparency marker" "Pace Control is influencing" "$OUTPUT"
+
+# No unsupported claims in L4
+cleanup
+setup_day_config
+setup_state 250 55 false
+OUTPUT=$(bash "$TRACKER" 2>/dev/null)
+assert_not_output "L4 daytime — no 2-3x claim" "2-3x" "$OUTPUT"
+assert_not_output "L4 daytime — no slot machine" "slot machine" "$OUTPUT"
+assert_not_output "L4 daytime — no go to bed" "go to bed" "$OUTPUT"
+assert_not_output "L4 daytime — no MANDATORY" "MANDATORY" "$OUTPUT"
+assert_output "L4 — transparency marker" "Pace Control is influencing" "$OUTPUT"
+
+# L4 micro-loop is different from L3 micro-loop
+cleanup
+setup_day_config
+setup_state 266 65 true 0 65 4
+OUTPUT=$(bash "$TRACKER" 2>/dev/null)
+assert_output "L4 micro-nudge — distinct from L3" "Ready to save|save your work|Extended session" "$OUTPUT"
+
+# Strict mode has override path
+cleanup
+echo '{"mode":"strict","nightStartHour":0,"nightEndHour":0}' > "$CONFIG_FILE"
+setup_state 130 30 false
+OUTPUT=$(bash "$TRACKER" 2>/dev/null)
+assert_output "Strict mode — has override" "override" "$OUTPUT"
+rm -f "$CONFIG_FILE"
+
+# First-run welcome mentions /wrap-up
+cleanup
+setup_day_config
+rm -f "$HISTORY_FILE"
+OUTPUT=$(bash "$STARTER" 2>/dev/null)
+assert_output "First-run — mentions /wrap-up" "wrap-up" "$OUTPUT"
+
+# Late-night start — no presumptuous messaging
+cleanup
+setup_night_config
+rm -f "$RESUME_FILE" "$IDEAS_FILE" "$HISTORY_FILE"
+# Create minimal history so it doesn't trigger first-run welcome
+echo '{"sessions":[{"start":1,"end":2,"minutes":60,"prompts":10,"startHour":23}]}' > "$HISTORY_FILE"
+OUTPUT=$(bash "$STARTER" 2>/dev/null)
+assert_not_output "Late-night start — no 3am claim" "3am finishes" "$OUTPUT"
 
 # --- Results ---
 echo ""
