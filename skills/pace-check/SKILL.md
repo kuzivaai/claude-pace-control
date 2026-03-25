@@ -22,82 +22,16 @@ Read the session state and provide an honest assessment.
 **2-3 hours:**
 "[X]h [Y]m in, [N] prompts. Extended sessions widen the gap between perceived and actual performance. After a break, you'll likely notice issues you're missing now."
 
-**3+ hours — offer safe wind-down:**
-"[X]h [Y]m in, [N] prompts. Want me to save everything so you can pick up right where you left off?"
+**3+ hours — suggest /wrap-up:**
+"[X]h [Y]m in, [N] prompts. Want me to save everything? Just say /wrap-up — it commits your code, saves context, and captures ideas."
 
-If they say yes, execute the Safe Wind-Down Protocol below.
+If they say yes, tell them to run `/wrap-up`. Do not attempt to do the git operations yourself.
 
-## Safe Wind-Down Protocol
+## Saving Work
 
-When the user wants to stop (or when triggered at 3-4+ hours), execute these steps IN ORDER:
+If the user wants to save, direct them to `/wrap-up`. That command handles everything mechanically — git commit, resume file, ideas capture.
 
-### Step 1: Save Work
-```bash
-git status
-```
-If there are uncommitted changes:
-- Stage relevant files (not node_modules, .env, etc.)
-- Commit with a descriptive message summarising what was accomplished
-- Tell the user what was committed
-
-### Step 2: Save Session Context
-Write a resume file to `~/.claude/pace-control-resume.md`:
-
-```markdown
-## Session Resume — [date and time]
-
-### What We Were Working On
-[Describe the current task, feature, or bug being worked on]
-
-### Current State
-- What's complete: [list completed items]
-- What's in progress: [list partially done work]
-- What's not started: [list remaining items if known]
-
-### Next Steps
-1. [Specific next action — be precise enough that a fresh Claude session can pick this up]
-2. [Second action]
-3. [Third action if applicable]
-
-### Modified Files
-- `path/to/file1.ts` — [what was changed]
-- `path/to/file2.tsx` — [what was changed]
-
-### Open Questions
-- [Any decisions that need to be made]
-- [Any blockers or unknowns]
-
-### Running Processes
-- [Any servers, watchers, or background processes that should be restarted]
-```
-
-### Step 3: Capture Ideas
-Ask: "Any ideas racing through your mind? I'll save them so you won't lose them."
-
-Append to `~/.claude/pace-control-ideas.md`:
-```markdown
-## [Date] — Ideas from [X]h session
-- [idea 1]
-- [idea 2]
-```
-
-### Step 4: Confirm
-Tell the user:
-"Everything is saved:
-- Code committed: [commit message]
-- Session context saved to ~/.claude/pace-control-resume.md
-- [N] ideas captured
-
-When you start a new Claude Code session, I'll show you exactly where we left off. Nothing is lost. You'll solve the remaining problems faster with fresh eyes."
-
-## Session Resume (on next start)
-
-When a session starts and `~/.claude/pace-control-resume.md` exists, the SessionStart hook will inject the resume context. Claude should:
-
-1. Greet the user and summarise where they left off
-2. List saved ideas
-3. Ask: "Want to pick up where we left off, start with a saved idea, or work on something new?"
-4. Once decided, clear the resume/ideas files silently
+Do not attempt to run git commands or write resume files yourself. The `/wrap-up` skill handles this.
 
 ## Tone
 

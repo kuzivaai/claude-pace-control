@@ -30,7 +30,7 @@ Silent when you're productive. Escalates only when the evidence says you're decl
 | 1 | 90–120 min | 45–75 min | Mentions session length. No pressure. |
 | 2 | 2–3 hours | 75 min–2 hours | Surfaces error rate evidence. Supports stopping. |
 | 3 | 3–4 hours | 2–3 hours | Initiates Safe-Save Protocol. Suggests committing. |
-| 4 | 4+ hours | 3+ hours | Automatic wind-down. Commits, saves context, captures ideas. |
+| 4 | 4+ hours | 3+ hours | Auto-commits your code. Suggests wrapping up. |
 
 ### Late-Night Awareness
 
@@ -86,7 +86,7 @@ Surfaced on session start only — never during work. If the streak breaks: *"La
 | Property | Break Reminder Apps | Pace Control |
 |----------|-------------------|--------------|
 | **Location** | External notification | Inside your terminal |
-| **Dismissal** | One click to ignore | In Claude's response (you can still say "keep going") |
+| **Dismissal** | One click to ignore | Text in Claude's response — easy to skip over |
 | **Evidence** | "Time's up" | Research-backed session data |
 | **On stop** | Nothing happens | Commits code, saves context, captures ideas |
 | **Resume** | None | Full context injection next session |
@@ -223,16 +223,11 @@ python3 ~/.claude/plugins/pace-control/scripts/pace_control.py type incident
 
 ### Outcome Tracking
 
-Pace Control tracks whether its own nudges work:
-- How many L3+ nudges were shown per session
-- How many prompts happened after the first L3 nudge
-- Whether the session ended with `/wrap-up`
-
-This data surfaces in your weekly stats and helps determine whether the tool is actually useful.
+Pace Control logs per-session data: nudges shown, prompts after first L3 nudge, whether you used `/wrap-up`. Run `/pace-stats` to see whether the nudges are actually changing your behaviour.
 
 ### Mechanical Save
 
-When you run `/wrap-up`, the Python module handles the git commit and resume file directly — not through Claude following instructions. This means saves are reliable regardless of Claude's compliance.
+When you run `/wrap-up`, the Python module handles the git commit and resume file directly. At Level 4, the tool auto-commits your tracked changes before Claude even responds — so your work is saved regardless of what happens next.
 
 ## Files
 

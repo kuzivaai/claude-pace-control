@@ -132,12 +132,12 @@ OUTPUT=$(bash "$TRACKER" 2>/dev/null)
 assert_output "L2 daytime (150m)" "pace-control" "$OUTPUT"
 assert_output "L2 daytime — evidence" "METR|slower|performance|declining" "$OUTPUT"
 
-# --- L3: First fire — full Safe-Save ---
+# --- L3: First fire — suggests /wrap-up ---
 cleanup
 setup_day_config
 setup_state 200 40 false
 OUTPUT=$(bash "$TRACKER" 2>/dev/null)
-assert_output "L3 daytime first-fire" "SAFE-SAVE PROTOCOL" "$OUTPUT"
+assert_output "L3 daytime first-fire" "wrap-up" "$OUTPUT"
 assert_not_output "L3 daytime — not L4" "MANDATORY" "$OUTPUT"
 
 # Verify state was updated with windDownLevel >= 3 (windDownShown removed; derivable from windDownLevel > 0)
@@ -173,19 +173,19 @@ setup_state 200 43 true 0 45 3
 OUTPUT=$(bash "$TRACKER" 2>/dev/null)
 assert_empty "L3 boundary silent (43+1=44 < 45)" "$OUTPUT"
 
-# --- L4: First fire ---
+# --- L4: First fire (auto-save) ---
 cleanup
 setup_day_config
 setup_state 250 55 false
 OUTPUT=$(bash "$TRACKER" 2>/dev/null)
-assert_output "L4 daytime first-fire" "SAFE-SAVE PROTOCOL" "$OUTPUT"
+assert_output "L4 daytime first-fire" "auto-saved" "$OUTPUT"
 
 # --- L4: First fire after L3 micro-loop (reset — windDownLevel=3 triggers reset) ---
 cleanup
 setup_day_config
 setup_state 250 60 true 3 65 3
 OUTPUT=$(bash "$TRACKER" 2>/dev/null)
-assert_output "L4 from L3 micro-loop — reset" "SAFE-SAVE PROTOCOL" "$OUTPUT"
+assert_output "L4 from L3 micro-loop — reset" "auto-saved" "$OUTPUT"
 
 # --- Firm mode: lower thresholds ---
 cleanup

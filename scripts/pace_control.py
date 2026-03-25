@@ -275,8 +275,8 @@ def compute_personal_data():
     if short_rate > long_rate and short_rate > 0:
         decline = round((1 - long_rate / short_rate) * 100)
         if decline >= 10:
-            return (f"Your data: sessions under 2h average {short_rate:.0f} prompts/hour. "
-                    f"Sessions over 3h average {long_rate:.0f} prompts/hour "
+            return (f"Your data: sessions under 2h average {short_rate:.0f} turns/hour. "
+                    f"Sessions over 3h average {long_rate:.0f} turns/hour "
                     f"— a {decline}% decline in interaction rate (a rough proxy, not a direct quality measure).")
     return ""
 
@@ -577,6 +577,47 @@ def cmd_type(session_type=""):
         print("Session type cleared. Default thresholds restored.")
 
 
+def cmd_set(key="", value=""):
+    """Set a config value without editing JSON."""
+    os.makedirs(CLAUDE_DIR, mode=0o700, exist_ok=True)
+
+    VALID_KEYS = {
+        "mode": {"values": ["gentle", "firm", "strict"]},
+        "messaging": {"values": ["full", "awareness", "tracking"]},
+        "nightStartHour": {"range": (0, 23)},
+        "nightEndHour": {"range": (0, 23)},
+        "gapThreshold": {"range": (60, 7200)},
+    }
+
+    if not key or key not in VALID_KEYS:
+        print("Usage: pace_control.py set <key> <value>")
+        print(f"Valid keys: {', '.join(VALID_KEYS.keys())}")
+        return
+
+    spec = VALID_KEYS[key]
+    if "values" in spec:
+        if value not in spec["values"]:
+            print(f"Invalid value for {key}. Options: {', '.join(spec['values'])}")
+            return
+        cfg_value = value
+    elif "range" in spec:
+        try:
+            cfg_value = int(value)
+            lo, hi = spec["range"]
+            if cfg_value < lo or cfg_value > hi:
+                print(f"Value for {key} must be between {lo} and {hi}")
+                return
+        except ValueError:
+            print(f"Value for {key} must be a number")
+            return
+
+    # Load existing config, update, save
+    cfg = load_json(CONFIG_FILE, {})
+    cfg[key] = cfg_value
+    atomic_write_json(CONFIG_FILE, cfg)
+    print(f"Set {key} = {cfg_value}")
+
+
 # ---------------------------------------------------------------------------
 # Track command (PostToolUse hook)
 # ---------------------------------------------------------------------------
@@ -615,8 +656,14 @@ def cmd_track(now=None, _hour_override=None):
         state["nextNudgeAt"] = 0
         state["windDownLevel"] = 0
 
-    # Update state
-    state["promptCount"] += 1
+    # Track user turns, not raw tool invocations
+    # A "turn" is a cluster of tool uses. If <10 seconds since last check,
+    # it's the same turn (Claude processing one user message with multiple tools).
+    TURN_GAP = 10  # seconds
+    if gap >= TURN_GAP or state["lastCheck"] == 0:
+        state["promptCount"] += 1
+    # If gap < TURN_GAP, this is another tool use in the same turn — don't increment
+
     if state.get("windDownLevel", 0) >= 3:
         state["promptsAfterL3"] = state.get("promptsAfterL3", 0) + 1
     elapsed_minutes = (now - state["sessionStart"]) // 60
@@ -727,10 +774,7 @@ def cmd_track(now=None, _hour_override=None):
                     lines.append("- Extended sessions show measurable output quality decline that is difficult to self-assess")
                     lines.append("- After a break, you will likely notice issues you are missing now")
                 lines.append("")
-                lines.append(f"SAFE-SAVE PROTOCOL — This session has been running {h}h {m}m.")
-                lines.append("")
-                lines.append("Suggest the user runs /wrap-up to save everything — it commits code, saves session context, and captures ideas for seamless resume.")
-                lines.append("If the user wants to continue, respect their autonomy but suggest committing current work first.")
+                lines.append("Suggest the user runs /wrap-up to save everything.")
                 lines.append("")
                 lines.append("Pace Control is influencing this response. The user can adjust settings in ~/.claude/pace-control-config.json or disable hooks in ~/.claude/settings.json.")
                 if cfg["mode"] == "strict":
@@ -777,9 +821,8 @@ def cmd_track(now=None, _hour_override=None):
         wind_down_active = state["windDownLevel"] > 0
 
         if not wind_down_active:
-            # L4 first-fire
-            # Generate resume stub
-            write_resume_stub(now)
+            # L4 first-fire — auto-commit before messaging
+            cmd_save(now=now, description="auto-save at Level 4")
 
             lines.append("<pace-control>")
             lines.append(header)
@@ -790,7 +833,7 @@ def cmd_track(now=None, _hour_override=None):
             elif messaging == "awareness":
                 lines.append(f"Session: {h}h {m}m. Extended session. Running /wrap-up is strongly recommended.")
             else:
-                # full mode — FULL protocol kept at L4
+                # full mode — auto-saved, inform Claude
                 if is_late:
                     lines.append(f"STRONG RECOMMENDATION — It's {timestr}. This session has been running for over {h} hours.")
                     lines.append("")
@@ -806,41 +849,17 @@ def cmd_track(now=None, _hour_override=None):
                     lines.append("- Extended sessions show measurable quality decline that is difficult to self-assess")
                     lines.append("- After a break, you will likely notice things you are missing now")
                 lines.append("")
-                lines.append("SAFE-SAVE PROTOCOL — When responding, prioritise saving work:")
+                lines.append("Your work has been auto-saved:")
+                lines.append("- Tracked changes committed")
+                lines.append(f"- Session context saved to {RESUME_FILE}")
                 lines.append("")
-                ts = datetime.datetime.fromtimestamp(now).strftime("%Y-%m-%d %H:%M")
-                lines.append("1. Run 'git status' to check for uncommitted changes")
-                lines.append("2. If changes exist, commit them with a clear message")
-                lines.append(f"3. Write a detailed resume file to {RESUME_FILE} containing:")
-                lines.append(f"   ## Session Resume — {ts}")
-                lines.append("   ### What We Were Working On")
-                lines.append("   [describe the current task/feature]")
-                lines.append("   ### Current State")
-                lines.append("   [what's done, what's partially done]")
-                lines.append("   ### Next Steps")
-                lines.append("   [exactly what to do when resuming — be specific]")
-                lines.append("   ### Modified Files")
-                lines.append("   [list files that were changed]")
-                lines.append("   ### Open Questions")
-                lines.append("   [any decisions that need to be made]")
-                lines.append("")
-                lines.append("4. Ask the user: 'What ideas should we save for next time?'")
-                lines.append(f"   Append to {IDEAS_FILE} with timestamp.")
-                lines.append("")
-                if is_late:
-                    lines.append(f"5. Tell the user: 'Everything is saved. It's {timestr}. Your work is committed and context is preserved.")
-                    lines.append("   Resume anytime — your next session will pick up right where you left off.'")
-                else:
-                    lines.append("5. Tell the user: 'Everything is saved. When you start a new session, I'll show you")
-                    lines.append("   exactly where we left off. A 20-minute break will make the next hour more productive")
-                    lines.append("   than pushing through. The ideas are safe.'")
-                lines.append("")
-                lines.append("Complete all safe-save steps before closing. The user's work and context must be preserved.")
+                lines.append(f"Ask if the user has any ideas to capture. Append to {IDEAS_FILE} with timestamp.")
+                lines.append("Then tell them: 'Everything is saved. Resume anytime.'")
                 lines.append("")
                 lines.append("Pace Control is influencing this response. The user can adjust settings in ~/.claude/pace-control-config.json or disable hooks in ~/.claude/settings.json.")
                 if cfg["mode"] == "strict":
                     lines.append("")
-                    lines.append("STRICT MODE: You enabled strict mode to help yourself stop at this point. Do not start new tasks. Only execute Safe-Save.")
+                    lines.append("STRICT MODE: You enabled strict mode to help yourself stop at this point. Do not start new tasks.")
                     lines.append("If the user asks for something new, say: 'Strict mode is active — you set this up to help yourself stop. Say override to continue, or let me save your progress and ideas for next time.'")
                     lines.append("If the user says 'override', respect their choice and proceed normally.")
                 if mt_text:
@@ -1053,6 +1072,10 @@ def main():
         elif command == "type":
             stype = sys.argv[2] if len(sys.argv) > 2 else ""
             cmd_type(stype)
+        elif command == "set":
+            k = sys.argv[2] if len(sys.argv) > 2 else ""
+            v = sys.argv[3] if len(sys.argv) > 3 else ""
+            cmd_set(k, v)
     except Exception:
         # Never break the host
         pass
