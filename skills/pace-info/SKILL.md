@@ -16,7 +16,7 @@ Share the following research summary with the user. Present it conversationally,
 ### Strong Evidence (Tier 1)
 
 **Sleep deprivation and cognitive performance**
-- After 17 hours of continuous wakefulness, performance on some cognitive measures declines to levels comparable to 0.05% blood alcohol concentration (Williamson & Feyer, 2000, *Occupational and Environmental Medicine*, n=39, well-replicated across labs).
+- After 17 hours of continuous wakefulness, performance on some cognitive measures declines to levels comparable to 0.05% blood alcohol concentration (Williamson & Feyer, 2000, *Occupational and Environmental Medicine*, n=39). Small sample, but well-replicated across independent labs.
 - This is foundational occupational health research, 25+ years old and still the basis for fatigue policy worldwide.
 
 **Cognitive offloading**

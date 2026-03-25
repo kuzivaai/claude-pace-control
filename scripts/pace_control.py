@@ -78,13 +78,15 @@ def load_json(path, default=None):
 
 
 def xml_escape(text):
-    """Escape <, >, & for safe XML embedding, truncated to 2000 chars."""
+    """Escape XML special characters for safe embedding, truncated to 2000 chars."""
     if not text:
         return ""
     text = text[:2000]
     text = text.replace("&", "&amp;")
     text = text.replace("<", "&lt;")
     text = text.replace(">", "&gt;")
+    text = text.replace('"', "&quot;")
+    text = text.replace("'", "&apos;")
     return text
 
 
@@ -146,7 +148,7 @@ def load_config():
     # Validate
     cfg["nightStartHour"] = safe_int(cfg["nightStartHour"], 23)
     cfg["nightEndHour"] = safe_int(cfg["nightEndHour"], 6)
-    cfg["gapThreshold"] = safe_int(cfg["gapThreshold"], 1800)
+    cfg["gapThreshold"] = max(safe_int(cfg["gapThreshold"], 1800), 60)  # floor: 60s
     if cfg["mode"] not in ("gentle", "firm", "strict"):
         cfg["mode"] = "gentle"
     if cfg["messaging"] not in ("full", "awareness", "tracking"):
@@ -258,7 +260,7 @@ def compute_personal_data():
         if decline >= 10:
             return (f"Your data: sessions under 2h average {short_rate:.0f} prompts/hour. "
                     f"Sessions over 3h average {long_rate:.0f} prompts/hour "
-                    f"— a {decline}% decline.")
+                    f"— a {decline}% decline in interaction rate (a rough proxy, not a direct quality measure).")
     return ""
 
 

@@ -13,7 +13,7 @@ STARTER="$SCRIPT_DIR/session-start.sh"
 # Use a temp directory for state files to avoid polluting real state
 TEMP_HOME=$(mktemp -d)
 export HOME="$TEMP_HOME"
-trap "rm -rf '$TEMP_HOME'" EXIT
+trap 'rm -rf "$TEMP_HOME"' EXIT
 CLAUDE_DIR="$HOME/.claude"
 mkdir -p "$CLAUDE_DIR"
 
@@ -76,13 +76,14 @@ cleanup() {
 setup_state() {
   local elapsed_min="$1"
   local prompt_count="${2:-10}"
-  local wind_down_shown="${3:-false}"
+  # Parameter 3 was windDownShown (removed — derived from windDownLevel > 0)
+  local _unused="${3:-}"
   local wind_down_prompt_count="${4:-0}"
   local next_nudge_at="${5:-0}"
   local wind_down_level="${6:-0}"
   local start=$((NOW - elapsed_min * 60))
   local last=$((NOW - 30))
-  echo "{\"sessionStart\":${start},\"totalMinutes\":${elapsed_min},\"promptCount\":${prompt_count},\"lastCheck\":${last},\"windDownShown\":${wind_down_shown},\"windDownPromptCount\":${wind_down_prompt_count},\"nextNudgeAt\":${next_nudge_at},\"windDownLevel\":${wind_down_level}}" > "$STATE_FILE"
+  echo "{\"sessionStart\":${start},\"totalMinutes\":${elapsed_min},\"promptCount\":${prompt_count},\"lastCheck\":${last},\"windDownPromptCount\":${wind_down_prompt_count},\"nextNudgeAt\":${next_nudge_at},\"windDownLevel\":${wind_down_level}}" > "$STATE_FILE"
 }
 
 setup_night_config() {
@@ -309,7 +310,7 @@ assert_not_output "Second session — no welcome" "pace-control-welcome" "$OUTPU
 cleanup
 LAST=$((NOW - 2700))  # 45 minutes ago (> 1800 threshold)
 START=$((LAST - 3600))  # Session started 1h before last check
-echo "{\"sessionStart\":${START},\"totalMinutes\":60,\"promptCount\":20,\"lastCheck\":${LAST},\"windDownShown\":true,\"windDownPromptCount\":5,\"nextNudgeAt\":25,\"windDownLevel\":3}" > "$STATE_FILE"
+echo "{\"sessionStart\":${START},\"totalMinutes\":60,\"promptCount\":20,\"lastCheck\":${LAST},\"windDownPromptCount\":5,\"nextNudgeAt\":25,\"windDownLevel\":3}" > "$STATE_FILE"
 OUTPUT=$(bash "$TRACKER" 2>/dev/null)
 # After gap, windDownLevel should be reset to 0 (windDownShown removed; derivable from windDownLevel > 0)
 ACTUAL_STATE=$(find_tracker_state)
@@ -360,7 +361,7 @@ cleanup
 echo '{"sessions":[],"streak":{"current":3,"best":5,"lastUpdated":0}}' > "$HISTORY_FILE"
 LAST=$((NOW - 2100))
 GSTART=$((LAST - 3600))
-echo "{\"sessionStart\":${GSTART},\"totalMinutes\":60,\"promptCount\":20,\"lastCheck\":${LAST},\"windDownShown\":false,\"windDownPromptCount\":0,\"nextNudgeAt\":0,\"windDownLevel\":0}" > "$STATE_FILE"
+echo "{\"sessionStart\":${GSTART},\"totalMinutes\":60,\"promptCount\":20,\"lastCheck\":${LAST},\"windDownPromptCount\":0,\"nextNudgeAt\":0,\"windDownLevel\":0}" > "$STATE_FILE"
 OUTPUT=$(bash "$TRACKER" 2>/dev/null)
 STREAK_CURRENT=$(python3 -c "import json; print(json.load(open('$HISTORY_FILE')).get('streak',{}).get('current',0))" 2>/dev/null)
 if [ "$STREAK_CURRENT" = "4" ]; then
@@ -375,7 +376,7 @@ cleanup
 echo '{"sessions":[],"streak":{"current":3,"best":5,"lastUpdated":0}}' > "$HISTORY_FILE"
 LAST=$((NOW - 2100))
 GSTART=$((LAST - 14400))
-echo "{\"sessionStart\":${GSTART},\"totalMinutes\":240,\"promptCount\":60,\"lastCheck\":${LAST},\"windDownShown\":true,\"windDownPromptCount\":5,\"nextNudgeAt\":65,\"windDownLevel\":4}" > "$STATE_FILE"
+echo "{\"sessionStart\":${GSTART},\"totalMinutes\":240,\"promptCount\":60,\"lastCheck\":${LAST},\"windDownPromptCount\":5,\"nextNudgeAt\":65,\"windDownLevel\":4}" > "$STATE_FILE"
 OUTPUT=$(bash "$TRACKER" 2>/dev/null)
 STREAK_CURRENT=$(python3 -c "import json; print(json.load(open('$HISTORY_FILE')).get('streak',{}).get('current',0))" 2>/dev/null)
 STREAK_BEST=$(python3 -c "import json; print(json.load(open('$HISTORY_FILE')).get('streak',{}).get('best',0))" 2>/dev/null)
@@ -438,6 +439,43 @@ rm -f "$RESUME_FILE" "$IDEAS_FILE" "$HISTORY_FILE"
 echo '{"sessions":[{"start":1,"end":2,"minutes":60,"prompts":10,"startHour":23}]}' > "$HISTORY_FILE"
 OUTPUT=$(bash "$STARTER" 2>/dev/null)
 assert_not_output "Late-night start — no 3am claim" "3am finishes" "$OUTPUT"
+
+# --- Messaging modes: awareness ---
+cleanup
+echo '{"messaging":"awareness","nightStartHour":0,"nightEndHour":0}' > "$CONFIG_FILE"
+setup_state 150 25
+OUTPUT=$(bash "$TRACKER" 2>/dev/null)
+assert_output "Awareness mode L2 — has wrap-up" "wrap-up" "$OUTPUT"
+assert_not_output "Awareness mode L2 — no full evidence" "perceived and actual" "$OUTPUT"
+rm -f "$CONFIG_FILE"
+
+# --- Messaging modes: tracking ---
+cleanup
+echo '{"messaging":"tracking","nightStartHour":0,"nightEndHour":0}' > "$CONFIG_FILE"
+setup_state 150 25
+OUTPUT=$(bash "$TRACKER" 2>/dev/null)
+assert_output "Tracking mode L2 — has session time" "[0-9]+h [0-9]+m" "$OUTPUT"
+assert_output "Tracking mode L2 — has wrap-up" "wrap-up" "$OUTPUT"
+assert_not_output "Tracking mode L2 — no evidence" "perceived|performance|decline" "$OUTPUT"
+rm -f "$CONFIG_FILE"
+
+# --- Messaging modes: tracking at L3 ---
+cleanup
+echo '{"messaging":"tracking","nightStartHour":0,"nightEndHour":0}' > "$CONFIG_FILE"
+setup_state 200 40 false 0 0 0
+OUTPUT=$(bash "$TRACKER" 2>/dev/null)
+assert_output "Tracking mode L3 — has wrap-up" "wrap-up" "$OUTPUT"
+assert_not_output "Tracking mode L3 — no safe-save protocol" "SAFE-SAVE PROTOCOL" "$OUTPUT"
+rm -f "$CONFIG_FILE"
+
+# --- gapThreshold floor (minimum 60s) ---
+cleanup
+echo '{"gapThreshold":0,"nightStartHour":0,"nightEndHour":0}' > "$CONFIG_FILE"
+setup_state 100 15
+OUTPUT=$(bash "$TRACKER" 2>/dev/null)
+# With gapThreshold=0 (floored to 60), a 30-second-old lastCheck should NOT trigger gap
+assert_output "gapThreshold floor — still outputs at L1" "pace-control" "$OUTPUT"
+rm -f "$CONFIG_FILE"
 
 # --- Results ---
 echo ""

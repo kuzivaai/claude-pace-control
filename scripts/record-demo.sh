@@ -13,7 +13,7 @@ STARTER="$SCRIPT_DIR/session-start.sh"
 
 DEMO_HOME=$(mktemp -d)
 export HOME="$DEMO_HOME"
-trap "rm -rf '$DEMO_HOME'" EXIT
+trap 'rm -rf "$DEMO_HOME"' EXIT
 mkdir -p "$HOME/.claude"
 
 # Force daytime mode so demo looks correct regardless of actual time
